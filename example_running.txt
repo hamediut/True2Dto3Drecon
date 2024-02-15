@@ -1,0 +1,5 @@
+## Running the training script:
+train.py
+
+## to run the infrence:
+python inference.py --G_pkl D:\Hamed\SliceGAN_2Dto3D\new_runs\013_BSEImgs_ImgSize_256_resized_from_384_batchSize_2_modnet_convlast-1\checkpoints\best_model\WGAN_Gen_iter_34000.pt --output_dir D:\Hamed\SliceGAN-V1.1\training-runs\009_RES_384_ImgSize_256_BatchSize_2_D_batch_size_2_Lrg_0.0001_LrD_0.0001_Lambda_10 --num_imgs 10 --z_size 4 --radius 3
