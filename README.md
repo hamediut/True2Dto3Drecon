@@ -45,7 +45,7 @@ and save them as a dictionary `*.pkl` file in the
 | :--- | :--: | :----: | :---------: |
 | [XCT images](https://drive.google.com/file/d/1cX8SISCeEQCeTIddzLySBwAL8IXRkZXC/view?usp=drive_link) | 128.1 MB | tif | X-ray tomography image
 | [BSE images](https://drive.google.com/drive/folders/1lHXqiq627X1z7EJTagvoYkqjXUdV-a9r?usp=drive_link) | 27 MB | | Folder containing binary backscattered 2D images in X, Y, and Z directions.
-| [Optical images] (https://drive.google.com/drive/folders/198PSDMM1vjrd0lANq43euVwHINft96Hp?usp=drive_link) | 4.37 GB | | Folder for optical images
+| [Optical images](https://drive.google.com/drive/folders/198PSDMM1vjrd0lANq43euVwHINft96Hp?usp=drive_link) | 4.37 GB | | Folder for optical images
 
 Here is the summary of scripts in this repository:
 - ``REV.py``: Calculates representative elementary volume from a 3D image, if applicable.
