@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import tifffile
 from tqdm import tqdm
-
+from typing import List, Dict
 from numba import jit
 
 ## correlation functions for 2D images-------------------------
@@ -282,3 +282,62 @@ def calculate_two_point_3D(images, directional = None):
         df_z_grouped = df_z.groupby(['r']).agg( {'s2': [np.mean, np.std, np.size] } )
 
         return df_x_grouped, df_y_grouped, df_z_grouped, (df_x_grouped +  df_y_grouped + df_z_grouped)/3
+
+def REV(image: np.ndarray,
+            img_size_list: List[int],
+            n_rand_samples: int)-> Dict[str, np.ndarray]:
+    
+    """
+    This function receives a 3D (XCT) image and calculates average S2 and F2 for the whole image and a number of random subvolumes.
+    These average correlation functions can then be analysed to determine the REV for the image.
+    Parameters
+    ----------
+    image: np.ndarray
+    This is the 3D image read as numpy array to do REV analysis on.
+
+    img_size_list: List
+    list of image sizes to calculate correlation functions. These sizes should be smaller than the whole image.
+
+    n_rand_samples: int
+    number of random images used for calculating REV. use 30 or more.
+
+    Returns
+    --------
+    It returns two dictionary: one for s2 (s2_3d_dict) and one for f2 (f2_3d_dict)
+"""
+    
+    x_max, y_max, z_max = image.shape[:]
+    
+    s2_3d_dict = {}
+    f2_3d_dict = {}
+
+    ## calculate S2 and F2 on the original 3D image
+    # check if it is binary: 0:solid, 1: pore
+    if image.max() > 1:
+        image = np.where(image > 1,1,0)
+    # first calculate s2 and f2 for the whole image
+    _, _, _, s2_avg_original = calculate_two_point_3D(image)
+    f2_avg_original = cal_fn(s2_avg_original, n = 2)
+
+    s2_3d_dict['original'] = s2_avg_original
+    f2_3d_dict['original'] = f2_avg_original
+
+    for image_size in tqdm(img_size_list):
+
+        all_crops = np.zeros((n_rand_samples, image_size, image_size, image_size), dtype = np.uint8)
+        for i in range(n_rand_samples):
+
+            x = np.random.randint (0, x_max - image_size)
+            y = np.random.randint (0, y_max - image_size)
+            z = np.random.randint (0, z_max - image_size)
+
+            crop_image = image[x:x + image_size, y:y + image_size, z:z + image_size]
+            all_crops[i] = crop_image
+            
+        df_s2, df_f2 = calculate_two_point_3D(all_crops)
+        s2_3d_dict[f'sub_{image_size}'] = df_s2
+        f2_3d_dict[f'sub_{image_size}'] = df_f2
+
+        print(f'{image_size} done !')
+        
+    return s2_3d_dict, f2_3d_dict

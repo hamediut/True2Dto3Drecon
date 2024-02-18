@@ -9,6 +9,13 @@
  ![](Fig1_Workflow.jpg)
 
  ## Usage
+ ### Overview
+Here is the summary of scripts in this repository:
+- ``REV.py``: Calculates representative elementary volume from a 3D image, if applicable.
+<!-- - ``RES.py``: Calculate representative elementary size for 2D images. -->
+- ``train.py``: Trains the modified SliceGAN using 2D images.
+- ``inference.py``: Generates 3D images using a pre-trained generator.
+
  ### Representative elementary size (RES) analysis
  Before training your model for 2D-to-3D reconstructions, representative image size should be determined. If you have a 3D ground-truth volume of your sample, run:
 ```
@@ -50,13 +57,6 @@ and save them as a dictionary `*.pkl` file in the
 | [Generator Optical](https://drive.google.com/file/d/1TiusyUWFmz6lb_NrNtxlUpngRvqO1lSQ/view?usp=drive_link) | 691.1 MB | pt | Generator trained with Optical images
 
 
-## Pre-trained models
-
-Here is the summary of scripts in this repository:
-- ``REV.py``: Calculates representative elementary volume from a 3D image, if applicable.
-<!-- - ``RES.py``: Calculate representative elementary size for 2D images. -->
-- ``train.py``: Trains the modified SliceGAN using 2D images.
-- ``inference.py``: Generate 3D images using the pre-trained generator.
 
 
  
