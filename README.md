@@ -38,14 +38,19 @@ and save them as a dictionary `*.pkl` file in the
  ``` 
  `img_size`: the image size you used for training your model. For generating images larger than your training images, you can run the inference with larger `z_size` e.g., 6 to generate $512^3$.
 
- ## Dataset
- All dataset used in our paper can be downloaded from the following links:
+ ## Dataset and pre-trained models
+ All dataset used in our paper and pre-trained models can be downloaded from the following links:
 
 | Path | Size | Format | Description |
 | :--- | :--: | :----: | :---------: |
 | [XCT images](https://drive.google.com/file/d/1cX8SISCeEQCeTIddzLySBwAL8IXRkZXC/view?usp=drive_link) | 128.1 MB | tif | X-ray tomography image
 | [BSE images](https://drive.google.com/drive/folders/1lHXqiq627X1z7EJTagvoYkqjXUdV-a9r?usp=drive_link) | 27 MB | | Folder containing binary backscattered 2D images in X, Y, and Z directions.
 | [Optical images](https://drive.google.com/drive/folders/198PSDMM1vjrd0lANq43euVwHINft96Hp?usp=drive_link) | 4.37 GB | | Folder for optical images
+| [Generator BSE](https://drive.google.com/file/d/1Eve0lMVXUOmQpqGzZG4bK-xkK3du-ttY/view?usp=drive_link) | 691.1 MB | pt | Generator trained with BSE images
+| [Generator Optical](https://drive.google.com/file/d/1TiusyUWFmz6lb_NrNtxlUpngRvqO1lSQ/view?usp=drive_link) | 691.1 MB | pt | Generator trained with Optical images
+
+
+## Pre-trained models
 
 Here is the summary of scripts in this repository:
 - ``REV.py``: Calculates representative elementary volume from a 3D image, if applicable.
