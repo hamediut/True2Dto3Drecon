@@ -240,7 +240,7 @@ def train():
           g_penalty = calc_gradient_penalty(netD, real_data, fake_data_perm[:args.batch_size],
                                              args.batch_size, args.train_img_size,
                                              device, args.Lambda, args.img_channels)
-          disc_cost = out_fake -out_real +g_penalty
+          disc_cost = out_fake - out_real + g_penalty
 
           sum_D_loss_real += _get_tensor_value(out_real + g_penalty)
           sum_D_loss_gen  += _get_tensor_value(out_fake)

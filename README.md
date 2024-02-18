@@ -9,15 +9,17 @@
  ![](Fig1_Workflow.jpg)
 
  ## Usage
- Before training your model for 2D-to-3D reconstructions,representative image size should be determined. If you have a 3D ground-truth volume of your sample, run:
+ ### Representative elementary size (RES) analysis
+ Before training your model for 2D-to-3D reconstructions, representative image size should be determined. If you have a 3D ground-truth volume of your sample, run:
 ```
 python REV.py --image_dir 'full path to your 3D binary image' \
 --imag_sizes 400, 350, 256, 128, 64 \
 --n_rnd_samples 50 --output_dir 'path to save the output'
 
-# this will calculate average $S_2$ and $F_2$ in three dimensions and save them as a dictionary `*.pkl` file in the 
+# this will calculate average $S_2$ and $F_2$ in three dimensions \
+and save them as a dictionary `*.pkl` file in the 
 ```
-
+### Training your own model
  For training the model using your 2D images. you need three (for anisotropic microstructure) 2D binary images (with value 1 showing your phase of interest). To train your own model run:
  ```
  python train.py --dir_img_1 Data\BSE_images\X_R3_binary.tif \
@@ -26,15 +28,24 @@ python REV.py --image_dir 'full path to your 3D binary image' \
  --RES 384 --train_img_size 256 --batch_size 2
 
  ```
-
- After training, your best model will be saved in a folder in the specified directory. Then for generating images using pre-trained model:
+### Generate images using pre-trained models
+ After training, your best model will be saved in a folder in the specified directory. Then, for generating images using pre-trained model "run the following script.
  ```
  ## Here is an example to generate using the generator trained with BSE images:
- python inference.py --G_pkl Pretrained_models\WGAN_Gen_iter_34000.pt \
+ python inference.py --G_pkl Path\to\yourfolder\*.pt
  --ngpu 1 --num_img 100 img_size 256 --z_size 4.
 
  ``` 
- `img_size` is the image size you used for training your model. for generating images larger than your training images you can run the inference with `z_size` of 6 to generate images of size $512^3$.
+ `img_size`: the image size you used for training your model. For generating images larger than your training images, you can run the inference with larger `z_size` e.g., 6 to generate $512^3$.
+
+ ## Dataset
+ All dataset used in our paper can be downloaded from the following links:
+
+| Path | Size | Format | Description |
+| :--- | :--: | :----: | :---------: |
+| [XCT images](https://drive.google.com/file/d/1cX8SISCeEQCeTIddzLySBwAL8IXRkZXC/view?usp=drive_link) | 128.1 MB | tif | X-ray tomography image
+| [BSE images](https://drive.google.com/drive/folders/1lHXqiq627X1z7EJTagvoYkqjXUdV-a9r?usp=drive_link) | 27 MB | | Folder containing binary backscattered 2D images in X, Y, and Z directions.
+| [Optical images] (https://drive.google.com/drive/folders/198PSDMM1vjrd0lANq43euVwHINft96Hp?usp=drive_link) | 4.37 GB | | Folder for optical images
 
 Here is the summary of scripts in this repository:
 - ``REV.py``: Calculates representative elementary volume from a 3D image, if applicable.
