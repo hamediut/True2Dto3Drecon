@@ -20,11 +20,11 @@ Here is the summary of scripts in this repository:
  Before training your model for 2D-to-3D reconstructions, representative image size should be determined. If you have a 3D ground-truth volume of your sample, run:
 ```
 python REV.py --image_dir 'full path to your 3D binary image' \
---imag_sizes 400, 350, 256, 128, 64 \
+--image_sizes 64 128 256 350 400 \
 --n_rnd_samples 50 --output_dir 'path to save the output'
 
 # this will calculate average $S_2$ and $F_2$ in three dimensions \
-and save them as a dictionary `*.pkl` file in the 
+and save them as a dictionary `*.pkl` files in the `output_dir`.
 ```
 ### Training your own model
  For training the model using your 2D images. you need three (for anisotropic microstructure) 2D binary images (with value 1 showing your phase of interest). To train your own model run:

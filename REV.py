@@ -14,13 +14,13 @@ import argparse
 import numpy as np
 import pandas as pd
 import tifffile
-from numba import jit
-from tqdm import tqdm 
-from typing import List, Dict
+# from numba import jit
+# from tqdm import tqdm 
+# from typing import List, Dict
 import joblib
 
 
-from src.SMD_cal import REV
+from src.SMD_cal import REV, calculate_two_point_3D, cal_fn
 
 
 def parse_args():
@@ -29,7 +29,7 @@ def parse_args():
   parser.add_argument('--image_dir', required= True, type=str,
                        help='Full path to the large image file. it should be .tif file')
   parser.add_argument('--image_sizes', required =True, type=int, nargs='+',
-                      help='List of the image sizes you want to do REV analysis with')
+                      help='List of the image sizes you want to do REV analysis with. provided with space: 64 128 256 etc')
   parser.add_argument('--n_rnd_samples', type=int, default=50,
                       help='Number of random subvolume of each size to calculate average S2, F2')
   parser.add_argument('--seed', type= int, default= 33)
@@ -44,10 +44,20 @@ def run_REV():
     np.random.seed(args.seed)
 
     original_img = tifffile.imread(args.image_dir).astype(np.uint8)
-    # # check if it is binary: 0:solid, 1: pore
-    ## run REV function on the list of image
+    # check if it is binary: 0:solid, 1: pore
+    if original_img.max() > 1:
+        original_img = np.where(original_img > 1,1,0)
+
+    ## run the REV function on the list of image
     s2_3d_dict, f2_3d_dict = REV(original_img, img_size_list = args.image_sizes,
                                     n_rand_samples=args.n_rnd_samples)
+    
+    # Then calculate s2 and f2 for the whole image
+    _, _, _, s2_avg_original = calculate_two_point_3D(original_img)
+    f2_avg_original = cal_fn(s2_avg_original, n = 2)
+
+    s2_3d_dict['original'] = s2_avg_original
+    f2_3d_dict['original'] = f2_avg_original
     
     joblib.dump(s2_3d_dict, os.path.join(args.output_dir, 's2_3d_dict.pkl'))
     joblib.dump(f2_3d_dict, os.path.join(args.output_dir, 'f2_3d_dict.pkl'))

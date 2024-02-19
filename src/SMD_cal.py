@@ -285,7 +285,7 @@ def calculate_two_point_3D(images, directional = None):
 
 def REV(image: np.ndarray,
             img_size_list: List[int],
-            n_rand_samples: int)-> Dict[str, np.ndarray]:
+            n_rand_samples: int)-> Dict[str, pd.DataFrame]:
     
     """
     This function receives a 3D (XCT) image and calculates average S2 and F2 for the whole image and a number of random subvolumes.
@@ -311,16 +311,6 @@ def REV(image: np.ndarray,
     s2_3d_dict = {}
     f2_3d_dict = {}
 
-    ## calculate S2 and F2 on the original 3D image
-    # check if it is binary: 0:solid, 1: pore
-    if image.max() > 1:
-        image = np.where(image > 1,1,0)
-    # first calculate s2 and f2 for the whole image
-    _, _, _, s2_avg_original = calculate_two_point_3D(image)
-    f2_avg_original = cal_fn(s2_avg_original, n = 2)
-
-    s2_3d_dict['original'] = s2_avg_original
-    f2_3d_dict['original'] = f2_avg_original
 
     for image_size in tqdm(img_size_list):
 

@@ -59,13 +59,13 @@ def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument('--dir_img_1', required= True, type=str,
                        help='Full path to the 2D image taken from plane 1. it should be .tif file')
-  parser.add_argument('--dir_img_2', required= True, type=str,
+  parser.add_argument('--dir_img_2', type=str,
                         help='Full path to the 2D image taken from plane 2. it should be .tif file')
-  parser.add_argument('--dir_img_3', required= True, type=str,
+  parser.add_argument('--dir_img_3', type=str,
                         help='Full path to 2D image taken on plane 3. it should be .tif file')
   parser.add_argument('--RES', required= True, type = int,
                       help = 'Representative image size' )
-  parser.add_argument('--train_img_size', required= True, type =int, default= 256,
+  parser.add_argument('--train_img_size', type =int, default= 256,
                       help = 'training image size, it can be smaller than RES.')
   parser.add_argument('--img_channels', type= int, default= 1,
                       help = 'number of channels. Default is 1 (binary image)')
@@ -75,7 +75,7 @@ def parse_args():
                       help ='size of noise vector. z dimension: (batch_size, z_channels, z_size, z_size, z_size)')
   parser.add_argument('--num_train_imgs', type =int, default= 320000,
                       help= 'Total number of training images from each 2D image for training')
-  parser.add_argument('--batch_size', type = int, required=True, default= 2,
+  parser.add_argument('--batch_size', type = int, default= 2,
                       help= 'batch size for training the model. due to the gpu limitation we used 2. Use larger values if possible')
   parser.add_argument('--D_batch_size', type = int, default=2, help= 'batch size for D')
   parser.add_argument('--ngpu', type = int, default= 1,
@@ -91,14 +91,6 @@ def parse_args():
   parser.add_argument('--output_dir', type =str, help = 'Output directory to save models, images etc')
 
   
-
-#   parser.add_argument('--image_sizes', required =True, type=int, nargs='+',
-#                       help='List of the image sizes you want to do REV analysis with')
-#   parser.add_argument('--n_rnd_samples', type=int, default=50,
-#                       help='Number of random subvolume of each size to calculate average S2, F2')
-#   parser.add_argument('--seed', type= int, default= 33)
-#   parser.add_argument('--output_dir', type=str,
-#                       help='Directory to save the results')
   return parser.parse_args()
 
 def train():
@@ -120,10 +112,8 @@ def train():
       }
 
 
-
    output_folder = args.output_dir if args.output_dir else os.getcwd()
    
-
    current_run_folder, checkpoints_folder, best_folder, plots_imgs_folder = create_directories(output_folder, training_params=training_params)
    joblib.dump(training_params, os.path.join(current_run_folder, 'training_params.pkl'))
 
@@ -131,6 +121,10 @@ def train():
 
    print(f'Training parameters: {training_params}')
    print(f'Creating output folders. Running folder: {current_run_folder}')
+   if isotropic:
+      print(f'One 2D image provided, assuming isotropic microstructure.')
+   else:
+      print(f'{len(training_data_path)} 2D images provided, anisotropic microstructures.')
 
 
 
@@ -150,7 +144,7 @@ def train():
    # here we sample 100 images in each plane to calculate average s2.
    # Then, we compute mse between this average and average value of fakes images and use it as a criterion for saving best models.
    print('-----------------------------')
-   print('Constructing networks...')
+   # print('Constructing networks...')
    # Layers in G and D
    lays =10
    # kernals for each layer
@@ -169,18 +163,7 @@ def train():
    print ('Current cuda device ', torch.cuda.current_device())
    device = torch.device("cuda:0" if(torch.cuda.is_available() and args.ngpu > 0) else "cpu")
    # print('-----------------------------')
-
-   ## testing dimensionality of G and D
-#    netG = Generator(num_layers= lays, gf=gf, gk=gk, gs=gs, gp=gp).to(device)
-#    netD = Discriminator(num_layers=lays, df=df, dk= dk, ds=ds, dp=dp).to(device)
-#    noise = torch.randn(1, args.z_channels, 4, 4, 4, device = device)
-#    fake_test = netG(noise)
-#    D_G = netD(fake_test[:, :, 0, :, :])
    
-#    print(f'Shape of the output of the G: {fake_test.shape}')
-#    print(f'Shape of the output of the D:{D_G.shape}')
-   
-      
    netG = Generator(num_layers= lays, gf=gf, gk=gk, gs=gs, gp=gp).to(device)
    if ('cuda' in str(device)) and (args.ngpu >1):
       netG =nn.DataParallel(netG, list(range(args.ngpu)))
@@ -198,7 +181,6 @@ def train():
       netDs.append(netD)
       optDs.append(optim.Adam(netDs[i].parameters(), lr= args.lrd, betas= (0.5, 0.99)))
 
-
    print('-----------------------------')
    print('training loop started...')
 
@@ -208,7 +190,7 @@ def train():
    losses_dict['3disc_loss_gen'] = []
 
    mse_dict= {}
-   min_mse = 1
+   min_mse = 1 # we start with a large error and update it with the minimum mse obtained
 
    for i, (datax, datay, dataz) in enumerate(dataloader_xyz, start = 1):
       netG.train()
@@ -320,8 +302,12 @@ def train():
                 # save the checkpoint as the best model
                 torch.save(netG.state_dict(), os.path.join(best_folder, f'WGAN_Gen_iter_{i}.pt'))
                 torch.save(netDs[0].state_dict(), os.path.join(best_folder, f'WGAN_Disc0_iter_{i}.pt'))
-                torch.save(netDs[1].state_dict(), os.path.join(best_folder, f'WGAN_Disc1_iter_{i}.pt'))
-                torch.save(netDs[2].state_dict(), os.path.join(best_folder, f'WGAN_Disc2_iter_{i}.pt'))
+                if not isotropic: #if anisotropic, save all the discriminators for potentially resuming the training
+                   torch.save(netDs[1].state_dict(), os.path.join(best_folder, f'WGAN_Disc1_iter_{i}.pt'))
+                   torch.save(netDs[2].state_dict(), os.path.join(best_folder, f'WGAN_Disc2_iter_{i}.pt'))
+
+                # updating the minimum mse 
+                min_mse = mse_3d_avg
 
 
 if __name__== "__main__":
