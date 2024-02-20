@@ -1,3 +1,8 @@
+# test files only used by me
+example_running.txt
+setup.py
+environment.yml
+new_requirements.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
