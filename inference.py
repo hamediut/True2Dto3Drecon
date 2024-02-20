@@ -6,7 +6,6 @@ import argparse
 import os
 import numpy as np
 import random
-import sys
 import tifffile
 from skimage.filters import threshold_otsu
 from skimage.morphology import closing, ball
@@ -15,7 +14,7 @@ import torch
 from torch import nn
 
 from src.networks import Generator
-from src.util_functions import _get_tensor_value, Logger
+from src.util_functions import _get_tensor_value
 
 
 seed =33
@@ -54,7 +53,6 @@ def parse_args():
 
 def gen_img():
    args = parse_args()
-#    Logger(file_name=os.path.join(args.output_dir, 'log.txt'), file_mode='a', should_flush=True)
 
    print('-----------------------------')
    print('Checking cuda availability...')
@@ -63,10 +61,8 @@ def gen_img():
    print ('Available devices ', torch.cuda.device_count())
    print ('Current cuda device ', torch.cuda.current_device())
    device = torch.device("cuda:0" if(torch.cuda.is_available() and args.ngpu > 0) else "cpu")
-#    print('-----------------------------')
 
    print('-----------------------------')
-   print('Constructing networks...')
    # Layers in G and D
    lays =10
    # kernals for each layer

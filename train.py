@@ -10,35 +10,20 @@ import os
 from glob import glob
 import joblib 
 import numpy as np
-import pandas as pd
 import random
-import tifffile
-import sys
-import shutil
-import subprocess
 import argparse
-from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
 import torch
 from torch import nn
-from torch import autograd
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import ToTensor
+from torch.utils.data import DataLoader
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
 
 from skimage.metrics import mean_squared_error
-from skimage.filters import threshold_otsu
-from skimage.transform import resize #we use this for downsampling the training images
-from skimage import img_as_ubyte
-from skimage.morphology import closing, ball, cube
 
 from src.training_utils import Dataset_3BSEs, calc_gradient_penalty, evaluate_G, Logger
 from src.util_functions import _get_tensor_value, create_directories, plot_image_grid
-from src.SMD_cal import calculate_two_point_df
 from src.networks import Generator, Discriminator
 
 seed =33
@@ -118,13 +103,16 @@ def train():
    joblib.dump(training_params, os.path.join(current_run_folder, 'training_params.pkl'))
 
    Logger(file_name=os.path.join(current_run_folder, 'log.txt'), file_mode='a', should_flush=True)
-
+   print('--------------------------------')
    print(f'Training parameters: {training_params}')
+   print('--------------------------------')
    print(f'Creating output folders. Running folder: {current_run_folder}')
+
+   print('--------------------------------')
    if isotropic:
-      print(f'One 2D image provided, assuming isotropic microstructure.')
+      print(f'One 2D image provided --> isotropic microstructure.')
    else:
-      print(f'{len(training_data_path)} 2D images provided, anisotropic microstructures.')
+      print(f'{len(training_data_path)} two-dimensional images provided--> anisotropic microstructures.')
 
 
 
@@ -143,7 +131,6 @@ def train():
    
    # here we sample 100 images in each plane to calculate average s2.
    # Then, we compute mse between this average and average value of fakes images and use it as a criterion for saving best models.
-   print('-----------------------------')
    # print('Constructing networks...')
    # Layers in G and D
    lays =10
