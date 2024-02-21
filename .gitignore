@@ -2,6 +2,7 @@
 example_running.txt
 setup.py
 environment.yml
+Notebooks/REV_example.ipynb
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
