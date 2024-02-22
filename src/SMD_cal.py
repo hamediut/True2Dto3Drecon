@@ -9,8 +9,8 @@ from typing import List, Dict
 from numba import jit
 
 ## correlation functions for 2D images-------------------------
-@jit 
 # --> It is preferred to use numba here for a speed-up, if installed!!
+@jit
 def two_point_correlation(im, dim, var=1):
     """
     This method computes the two point correlation,
@@ -49,13 +49,16 @@ def two_point_correlation(im, dim, var=1):
             two_point[n1, r] = two_point[n1, r]/(float(lmax))
     return two_point
 
-def calculate_two_point_df(images):
+def calculate_two_point_list(images:np.ndarray) -> List[np.ndarray]:
     """
-    This function calculates average two-point correlations (s2 and fn) from images and convert them to dataframe.
+    This function calculates average two-point correlations (s2 and fn) from n_imgs of images
+    and returns a list of all of them.
+    Parameters:
+    images: np.ndarray of shape (n_imgs, img_size, mg_size)
     """
     
     s2_list = []
-    fn_list = []
+    f2_list = []
     
     for i in range(images.shape[0]):
         # 1) convert each image in the batch to microstructure
@@ -63,8 +66,9 @@ def calculate_two_point_df(images):
         # 3) append the results to the empty list above
         
         two_pt_dim0 = two_point_correlation(images[i], dim = 0, var = 1) #S2 in x-direction
+        # print(type(two_pt_dim0), two_pt_dim0.shape)
         two_pt_dim1 = two_point_correlation(images[i], dim = 1, var = 1) #S2 in y-direction
-
+        # print(type(two_pt_dim1), two_pt_dim1.shape)
         #Take average of directions; use half linear size assuming equal dimension sizes
         Nr = two_pt_dim0.shape[0]//2
 
@@ -77,25 +81,26 @@ def calculate_two_point_df(images):
         # autoscaled covriance---------------------------------------
         # f_average = (S2_average - S2_average[0]**2)/S2_average[0]/(1 - S2_average[0])
         f_average = cal_fn(S2_average, n= 2)
-        fn_list.append(f_average)
+        f2_list.append(f_average)
     
     # from list to dataframe----------
     
-    df_list = []
-    for i in np.arange(0, len(s2_list)):
-        df_list.append(pd.DataFrame(s2_list[i], columns = ['s2'] ) )
+    return s2_list, f2_list
+
+def list_to_df_two_point(s2_list:List[np.ndarray],
+                         f2_list:List[np.ndarray]
+                         )-> pd.DataFrame:
+    
+    df_list = [pd.DataFrame(s2, columns = ['s2'] ) for s2 in s2_list]
     df = pd.concat(df_list)
     df['r'] = df.index
     df_grouped = df.groupby( ['r'] ).agg( {'s2': [np.mean, np.std, np.size] } )
     
     
-    df_fn_list = []
-    for i in np.arange(0, len(fn_list)):
-        df_fn_list.append(pd.DataFrame(fn_list[i], columns = ['fn'] ) )
-    df_fn = pd.concat(df_fn_list)
-    df_fn['r'] = df_fn.index
-    df_fn_grouped = df_fn.groupby( ['r'] ).agg( {'fn': [np.mean, np.std, np.size] } )
-        
+    df_f2_list = [pd.DataFrame(f2, columns = ['f2'] ) for f2 in f2_list]
+    df_f2 = pd.concat(df_f2_list)
+    df_f2['r'] = df_f2.index
+    df_fn_grouped = df_f2.groupby( ['r'] ).agg( {'f2': [np.mean, np.std, np.size] } )  
         
     return df_grouped, df_fn_grouped
 
@@ -149,8 +154,7 @@ def two_point_correlation3D(im, dim, var=1):
                 two_point[n1, n2, r] = two_point[n1, n2, r]/(float(lmax))
     return two_point
 
-
-def cal_fn( polytope, n):
+def cal_fn( polytope:np.ndarray, n:int)->np.ndarray:
     """This function calculates scaled autocovariance function from Pn function.
     polytope:polytope function it can be two point correlation function (s2) or 
     higher order functions such as p3, p4, etc
@@ -331,3 +335,55 @@ def REV(image: np.ndarray,
         print(f'{image_size} done !')
         
     return s2_3d_dict, f2_3d_dict
+
+def RES(image: np.ndarray,
+            img_size_list: List[int],
+            n_rand_samples: int)-> Dict[str, pd.DataFrame]:
+    
+    """
+    This function receives a 2D binary image and calculates average S2 and F2 for the whole image and a number of random crops.
+    These average correlation functions can then be analysed to determine the RES for the image.
+    Parameters
+    ----------
+    image: np.ndarray
+    This is the 2D binary image read as numpy array to do RES analysis on.
+
+    img_size_list: List
+    list of image sizes to calculate correlation functions. These sizes should be smaller than the whole image.
+
+    n_rand_samples: int
+    number of random images used for calculating REV. use 30 or more.
+
+    Returns
+    --------
+    It returns two dictionary: one for s2 (s2_dict) and one for f2 (f2_dict)
+"""
+    
+    x_max, y_max = image.shape[:]
+    
+    s2_dict = {}
+    f2_dict = {}
+
+
+    for image_size in tqdm(img_size_list):
+
+        all_crops = np.zeros((n_rand_samples, image_size, image_size), dtype = np.uint8)
+        for i in range(n_rand_samples):
+
+            x = np.random.randint (0, x_max - image_size)
+            y = np.random.randint (0, y_max - image_size)
+
+            crop_image = image[x:x + image_size, y:y + image_size]
+            all_crops[i] = crop_image
+            
+        s2_list, f2_list = calculate_two_point_list(all_crops)
+        
+        s2_df, f2_df = list_to_df_two_point(s2_list, f2_list)
+
+
+        s2_dict[f'sub_{image_size}'] = s2_df
+        f2_dict[f'sub_{image_size}'] = f2_df
+
+        print(f'Image of size {image_size} done !')
+        
+    return s2_dict, f2_dict

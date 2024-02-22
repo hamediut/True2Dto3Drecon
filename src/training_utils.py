@@ -16,7 +16,7 @@ import typing
 from typing import Any, List, Tuple, Union
 
 from src.util_functions import _get_tensor_value
-from src.SMD_cal import calculate_two_point_df, calculate_two_point_3D
+from src.SMD_cal import calculate_two_point_list, list_to_df_two_point, calculate_two_point_3D
 
 
 class Dataset_3BSEs(Dataset):
@@ -89,9 +89,14 @@ class Dataset_3BSEs(Dataset):
         real_np_y = _get_tensor_value(batch_y)[:, 0, :, :].astype(np.uint8)
         real_np_z = _get_tensor_value(batch_z)[:, 0, :, :].astype(np.uint8)
 
-        s2_real_X, _ = calculate_two_point_df(real_np_x)
-        s2_real_Y, _ = calculate_two_point_df(real_np_y)
-        s2_real_Z, _ = calculate_two_point_df(real_np_z)
+        s2_real_X_list, f2_real_X_list = calculate_two_point_list(real_np_x)
+        s2_real_Y_list, f2_real_Y_list = calculate_two_point_list(real_np_y)
+        s2_real_Z_list, f2_real_Z_list = calculate_two_point_list(real_np_z)
+
+        s2_real_X, _ = list_to_df_two_point(s2_real_X_list, f2_real_X_list)
+        s2_real_Y, _ = list_to_df_two_point(s2_real_Y_list, f2_real_Y_list)
+        s2_real_Z, _ = list_to_df_two_point(s2_real_Z_list, f2_real_Z_list)
+
         s2_real_avg = (s2_real_X['s2']['mean'] + s2_real_Y['s2']['mean'] + s2_real_Y['s2']['mean'])/3
 
         if not return_s2:
