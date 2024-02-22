@@ -12,7 +12,7 @@
  ### Overview
 Here is the summary of scripts in this repository:
 - ``REV.py``: Calculates representative elementary volume from a 3D image, if applicable.
-<!-- - ``RES.py``: Calculate representative elementary size for 2D images. -->
+- ``RES.py``: Calculate representative elementary size for 2D images.
 - ``train.py``: Trains the modified SliceGAN using 2D images.
 - ``inference.py``: Generates 3D images using a pre-trained generator.
 
