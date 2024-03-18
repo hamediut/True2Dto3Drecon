@@ -23,7 +23,8 @@ class Dataset_3BSEs(Dataset):
     def __init__(self, image1_path: str,
                   image2_path: str,
                   image3_path: Optional[str]= None,
-                  patch_size: int =512, resized_to: Optional[int] = None,
+                  patch_size: int =512,
+                  resized_to: Optional[int] = None,
                   num_samples: int = 15000):
         self.image1_path = image1_path
         self.image2_path = image2_path
@@ -32,9 +33,10 @@ class Dataset_3BSEs(Dataset):
         self.num_samples = num_samples
         self.resized_to = resized_to
         #reading the original large images
-        self.image1 = tifffile.imread(self.image1_path)
-        self.image2 = tifffile.imread(self.image2_path)
-        self.image3 = tifffile.imread(self.image3_path) if image3_path is not None else None
+        # if image is not zero and 1, we put the maximum value =1--> important for s2 calculation
+        self.image1 = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
+        self.image2 = np.where(tifffile.imread(self.image2_path) >= 1, 1, 0).astype(np.uint8)
+        self.image3 = np.where(tifffile.imread(self.image3_path) >= 1, 1, 0).astype(np.uint8) if image3_path is not None else None
         
     def __len__(self):
         return self.num_samples  # Set the number of patches you want to extract
@@ -91,7 +93,8 @@ class Dataset_3BSEs(Dataset):
         """
         dataloader = DataLoader(self, batch_size= batch_size, shuffle = True)
         
-        batch_x, batch_y, batch_z = next(iter(dataloader))
+        batches = next(iter(dataloader))
+        return batches
         real_np_x = _get_tensor_value(batch_x)[:, 0, :, :].astype(np.uint8)
         real_np_y = _get_tensor_value(batch_y)[:, 0, :, :].astype(np.uint8)
         real_np_z = _get_tensor_value(batch_z)[:, 0, :, :].astype(np.uint8)
