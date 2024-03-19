@@ -167,7 +167,7 @@ def cal_fn( polytope:np.ndarray, n:int)->np.ndarray:
     fn_r = numerator/ denominator
     return fn_r
 
-def calculate_two_point_3D(images, directional = None):
+def calculate_two_point_3D(images, directional = False):
     """
     This function calculates average two-point correlation in 3D.
     Inputs: 
@@ -248,7 +248,7 @@ def calculate_two_point_3D(images, directional = None):
         s2_list_y = []
         s2_list_z = []
 
-        for i in tqdm( range(images.shape[0]) ):
+        for i in range(images.shape[0]):
 
             two_point_covariance = {}
             for j, direc in enumerate(["x", "y", "z"]) :

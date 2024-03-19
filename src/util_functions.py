@@ -85,7 +85,7 @@ def plot_image_grid(image_tensor, nrows=4, ncols = 4, figsize=(4, 4), title = 'x
     plt.tight_layout()
     if output_folder:
        plt.savefig(os.path.join(output_folder, f'{file_name}.png'), dpi =300)
-    # plt.show()
+    plt.close('all')
        
 
   
