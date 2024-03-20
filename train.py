@@ -67,7 +67,7 @@ def parse_args():
   parser.add_argument('--batch_size', type = int, default = 2,
                       help= 'batch size for training the model. due to the gpu limitation we used 2. Use larger values if possible')
   parser.add_argument('--D_batch_size', type = int, default = 2, help= 'batch size for D')
-  
+
   parser.add_argument('--ngpu', type = int, default= 1,
                       help= 'Number of available gpus. if ngpu > 1, model will be parallelized on ngpus')
   parser.add_argument('--lrg', type = float, default = 0.0001, help='learning rate for generator')
@@ -79,6 +79,8 @@ def parse_args():
   parser.add_argument('--mse_thresh', type = float, default = 5e-5, help= 'if mse btw s2_real and s2_fake is smaller than this, G and D will be saved')
   parser.add_argument('--num_img_eval', type =int, default= 8, help= 'Number of 3D images to generate during the training to calculate s2_fake and mse')
   parser.add_argument('--output_dir', type =str, help = 'Output directory to save models, images etc')
+  parser.add_argument('--resume_nets', type = str, help= 'Path to the folder where the generator and discriminators to resume exist.')
+#   parser.add_argument('--resume_iter', type = int, help= 'the iteration the model you want to resume for e.g., WGAN_Gen_iter_')
 
   
   return parser.parse_args()
@@ -99,7 +101,7 @@ def train():
    training_params = {
       'num_Ds': len(training_data_path), 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
       'lrg':args.lrg, 'lrd':args.lrd, 'Lambda': args.Lambda, 'critic_iters': args.critic_iters,
-      'z_size': args.z_size, 'train_img_size': args.train_img_size, 'RES': args.RES
+      'z_size': args.z_size, 'train_img_size': args.train_img_size, 'RES': args.RES, 'resume_path': args.resume_nets
       }
 
 
@@ -211,6 +213,19 @@ def train():
       optDs.append(optim.Adam(netDs[i].parameters(), lr= args.lrd, betas= (0.5, 0.99)))
 
    print('-----------------------------')
+
+   if args.resume_nets:
+      print(f'Resume training from snapshots in:{args.resume_nets}')
+      files = os.listdir(args.resume_nets) # file name would be sth like: 'WGAN_Disc0_iter_10000.pt'
+      if files[0].startswith('WGAN') and files[0].endswith('.pt'):
+         iter_num = files[0].split('_')[3].split('.')[0]# this gets the number at the end of the file name
+      netG.load_state_dict(torch.load(os.path.join(args.resume_nets, f'WGAN_Gen_iter_{iter_num}.pt')))
+      netDs[0].load_state_dict(torch.load(os.path.join(args.resume_nets, f'WGAN_Disc0_iter_{iter_num}.pt')))
+      netDs[1].load_state_dict(torch.load(os.path.join(args.resume_nets, f'WGAN_Disc1_iter_{iter_num}.pt')))
+      if len(training_data_path)==3:
+         netDs[2].load_state_dict(torch.load(os.path.join(args.resume_nets, f'WGAN_Disc2_iter_{iter_num}.pt')))
+
+
    print('training loop started...')
 
    losses_dict = {}
@@ -320,6 +335,7 @@ def train():
 
          plt.plot(s2_fake_x.index, s2_fake_x['s2']['mean'], color ='r', label = 'Fake x')
          plt.plot(s2_fake_y.index, s2_fake_y['s2']['mean'], color ='r', linestyle ='--', label = 'Fake y')
+         plt.plot(s2_fake_z.index, s2_fake_z['s2']['mean'], color ='r', linestyle =':', label = 'Fake z')
          plt.plot(s2_fake_3D_avg.index, s2_fake_3D_avg['s2']['mean'], color ='k', label='Fake avg')
          plt.xlabel('r(px)', fontsize = 'x-large')
          plt.ylabel('$S_2$', fontsize = 'x-large')
@@ -332,6 +348,8 @@ def train():
          if (mse_3d_avg < args.mse_thresh) or i % 10000 == 0:
             
             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
+            for D_index in range(len_dataset):
+                   torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
             if mse_3d_avg < min_mse:
                 #removing the previous best model in the folder cause they're not the best anymore
@@ -339,12 +357,8 @@ def train():
                     os.remove(filename) 
                 # save the checkpoint as the best model
                 torch.save(netG.state_dict(), os.path.join(best_folder, f'WGAN_Gen_iter_{i}.pt'))
-                for D_index in range(len_dataset):
-                   torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
-               #  if len_dataset > 1: #if anisotropic, save all the discriminators for potentially resuming the training
-                   
-               #     for D_index, Disc in enumerate(netDs, start=1):
-               #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+               #  for D_index in range(len_dataset):
+               #     torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 
                 # updating the minimum mse 
                 min_mse = mse_3d_avg
