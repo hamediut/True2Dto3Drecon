@@ -81,10 +81,12 @@ def gen_img():
    netG.eval()
 
    print('Creating output folder...')
+   model_name = args.G_pkl.split('\\')[-1] # get the file name at the end of the path e.g., WGAN_Gen_iter_11500.pt
+   iter_num = model_name.split('_')[-1].split('.')[0] # get the iteration number of the best model: 11500 for example
    if args.output_dir:
-      output_folder = os.path.join(args.output_dir, f'inference_z_size{args.z_size}_ball_{args.radius}')
+      output_folder = os.path.join(args.output_dir, f'inference_G_{iter_num}_Zsize{args.z_size}_ball_{args.radius}')
    else:
-      output_folder = os.path.join(os.getcwd(), f'inference_z_size{args.z_size}_ball_{args.radius}')
+      output_folder = os.path.join(os.getcwd(), f'inference_G_{iter_num}_Zsize{args.z_size}_ball_{args.radius}')
 #    output_folder = args.output_dir if args.output_dir else os.getcwd()
    print(f'Generated images will be saved in: {output_folder}')
    if not os.path.exists(output_folder):
@@ -104,11 +106,11 @@ def gen_img():
       fake_np = _get_tensor_value(netG(noise))[0, 0, :, :, :]
       thresh = threshold_otsu(fake_np)
       fake_np_binary = np.where(fake_np > thresh, 1, 0).astype(np.uint8)
-
+      ## post-processing
       if args.radius > 0:
          fake_np_binary = closing(fake_np_binary, ball(radius= args.radius))
-
-      tifffile.imwrite(os.path.join(output_folder, f'fake3D_{num}.tif'), fake_np_binary)
+      porosity = np.mean(fake_np_binary)
+      tifffile.imwrite(os.path.join(output_folder, f'fake3D_{num}_por_{porosity:.3f}.tif'), fake_np_binary)
    
 
 if __name__ == '__main__':

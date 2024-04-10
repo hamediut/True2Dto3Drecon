@@ -55,6 +55,9 @@ def run_RES()-> None:
   joblib.dump(s2_dict, os.path.join(args.output_dir, 's2_dict.pkl'))
   joblib.dump(f2_dict, os.path.join(args.output_dir, 'f2_dict.pkl'))
 
+  # joblib.dump(s2_dict, os.path.join(args.output_dir, 's2_AK295_CON_amp.pkl'))
+  # joblib.dump(f2_dict, os.path.join(args.output_dir, 'f2_AK295_CON_amp.pkl'))
+
 
 
 if __name__=="__main__":
