@@ -12,69 +12,78 @@ from skimage.filters import threshold_otsu
 import PIL
 
 import sys
-import typing
-from typing import Any, List, Tuple, Union
+
+from typing import Any, List, Tuple, Union, Optional
 
 from src.util_functions import _get_tensor_value
 from src.SMD_cal import calculate_two_point_list, list_to_df_two_point, calculate_two_point_3D
 
 
 class Dataset_3BSEs(Dataset):
-    def __init__(self, image1_path, image2_path, image3_path, patch_size=512, resized_to = None, num_samples = 15000):
+    def __init__(self, image1_path: str,
+                  image2_path: str,
+                  image3_path: Optional[str]= None,
+                  patch_size: int =512,
+                  resized_to: Optional[int] = None,
+                  num_samples: int = 15000):
         self.image1_path = image1_path
         self.image2_path = image2_path
         self.image3_path = image3_path
         self.patch_size = patch_size
         self.num_samples = num_samples
-#         self.batch_size = batch_size
         self.resized_to = resized_to
-        self.image1 = tifffile.imread(self.image1_path)
-        self.image2 = tifffile.imread(self.image2_path)
-        self.image3 = tifffile.imread(self.image3_path)
+        #reading the original large images
+        # if image is not zero and 1, we put the maximum value =1--> important for s2 calculation
+        self.image1 = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
+        self.image2 = np.where(tifffile.imread(self.image2_path) >= 1, 1, 0).astype(np.uint8)
+        self.image3 = np.where(tifffile.imread(self.image3_path) >= 1, 1, 0).astype(np.uint8) if image3_path is not None else None
         
     def __len__(self):
         return self.num_samples  # Set the number of patches you want to extract
 
     def __getitem__(self, index):
-
+        # Random crop coordinates for image1 and image2
         x1 = np.random.randint(0, self.image1.shape[0] - self.patch_size + 1)
         y1 = np.random.randint(0, self.image1.shape[1] - self.patch_size + 1)
         
         x2 = np.random.randint(0, self.image2.shape[0] - self.patch_size + 1)
         y2 = np.random.randint(0, self.image2.shape[1] - self.patch_size + 1)
         
-        x3 = np.random.randint(0, self.image3.shape[0] - self.patch_size + 1)
-        y3 = np.random.randint(0, self.image3.shape[1] - self.patch_size + 1)
-
+        # Extract patches for image1 and image2
         patch1 = self.image1[x1:x1 + self.patch_size, y1:y1 + self.patch_size]
         patch2 = self.image2[x2:x2 + self.patch_size, y2:y2 + self.patch_size]
-        patch3 = self.image3[x3:x3 + self.patch_size, y3:y3 + self.patch_size]
+
+        patches = [patch1, patch2]
 
         if self.resized_to:
 
-            patch1 = PIL.Image.fromarray(patch1)
-            patch1_resized =  patch1.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
-            thresh = threshold_otsu(np.array(patch1_resized))
-            patch1= np.where(np.array(patch1_resized) > thresh, 1, 0).astype(np.uint8)
-        
-            patch2 = PIL.Image.fromarray(patch2)
-            patch2_resized =  patch2.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
-            thresh = threshold_otsu(np.array(patch2_resized))
-            patch2 = np.where(np.array(patch2_resized) > thresh, 1, 0).astype(np.uint8)
-            
-            patch3 = PIL.Image.fromarray(patch3)
-            patch3_resized =  patch3.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
-            thresh = threshold_otsu(np.array(patch3_resized))
-            patch3 = np.where(np.array(patch3_resized) > thresh, 1, 0).astype(np.uint8)
-            
-            
-            
-        # Convert patches to PyTorch tensors
-        patch1 = torch.from_numpy(patch1).unsqueeze(dim =0).type(torch.cuda.FloatTensor)
-        patch2 = torch.from_numpy(patch2).unsqueeze(dim =0).type(torch.cuda.FloatTensor)
-        patch3 = torch.from_numpy(patch3).unsqueeze(dim =0).type(torch.cuda.FloatTensor)
+            resized_pathces = []
 
-        return patch1, patch2, patch3
+            for patch in patches:
+                patch_pil = PIL.Image.fromarray(patch)
+                patch_resized = patch_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
+                thresh = threshold_otsu(np.array(patch_resized))
+                resized_patch = np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
+                resized_pathces.append(resized_patch)
+            patches = resized_pathces
+        # Convert patches to PyTorch tensors
+        patches = [torch.from_numpy(patch).unsqueeze(dim=0).type(torch.cuda.FloatTensor) for patch in patches]
+
+        # If the third image is loaded, process it similarly
+        if self.image3 is not None:
+            x3 = np.random.randint(0, self.image3.shape[0] - self.patch_size + 1)
+            y3 = np.random.randint(0, self.image3.shape[1] - self.patch_size + 1)
+            patch3 = self.image3[x3:x3 + self.patch_size, y3:y3 + self.patch_size]
+
+            if self.resized_to:
+                patch3_pil = PIL.Image.fromarray(patch3)
+                patch3_resized =  patch3_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
+                thresh = threshold_otsu(np.array(patch3_resized))
+                patch3 = np.where(np.array(patch3_resized) > thresh, 1, 0).astype(np.uint8)
+            patch3 = torch.from_numpy(patch3).unsqueeze(dim=0).type(torch.cuda.FloatTensor)
+            patches.append(patch3)
+
+        return tuple(patches)
 
     def sample(self, batch_size, return_s2 =None):
         """
@@ -84,7 +93,8 @@ class Dataset_3BSEs(Dataset):
         """
         dataloader = DataLoader(self, batch_size= batch_size, shuffle = True)
         
-        batch_x, batch_y, batch_z = next(iter(dataloader))
+        batches = next(iter(dataloader))
+        return batches
         real_np_x = _get_tensor_value(batch_x)[:, 0, :, :].astype(np.uint8)
         real_np_y = _get_tensor_value(batch_y)[:, 0, :, :].astype(np.uint8)
         real_np_z = _get_tensor_value(batch_z)[:, 0, :, :].astype(np.uint8)
@@ -107,8 +117,8 @@ class Dataset_3BSEs(Dataset):
 
             
         
-
-def evaluate_G(netG, num_img, img_size = 256, z_size = 4, z_channels = 16, device = 'cuda'):
+###--------------------------------------------------------------------------------------
+def evaluate_G(netG, num_img, img_size = 256, z_size = 4, z_channels = 16, directional= False, device = 'cuda'):
 
     
     netG.eval()
@@ -123,11 +133,19 @@ def evaluate_G(netG, num_img, img_size = 256, z_size = 4, z_channels = 16, devic
             fake_np_stack_binary[i] = fake_np_binary
 
         # s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg = calculate_two_point_3D(fake_np_stack_binary, directional = True) # average s2 in 3D
-        s2_avg, f2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= False)    
+        if directional:
+            s2_x, s2_y, s2_z, s2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= directional)
+
+            return fake_np_stack_binary, s2_x, s2_y, s2_z, s2_avg
+
+        else:
+            s2_avg, f2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= directional) 
+            return fake_np_stack_binary, s2_avg, f2_avg
+
     
-    netG.train()
-    # return fake_np_stack_binary, s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg
-    return fake_np_stack_binary, s2_avg, f2_avg
+    # netG.train()
+    # # return fake_np_stack_binary, s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg
+    # return fake_np_stack_binary, s2_avg, f2_avg
 
 def calc_gradient_penalty(netD, real_data, fake_data, batch_size, img_size, device, Lambda, img_channels):
     """

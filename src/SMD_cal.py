@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import tifffile
 from tqdm import tqdm
-from typing import List, Dict
+from typing import List, Dict, Optional
 from numba import jit
 
 ## correlation functions for 2D images-------------------------
@@ -88,7 +88,7 @@ def calculate_two_point_list(images:np.ndarray) -> List[np.ndarray]:
     return s2_list, f2_list
 
 def list_to_df_two_point(s2_list:List[np.ndarray],
-                         f2_list:List[np.ndarray]
+                         f2_list:Optional[List[np.ndarray]] = None
                          )-> pd.DataFrame:
     
     df_list = [pd.DataFrame(s2, columns = ['s2'] ) for s2 in s2_list]
@@ -96,13 +96,16 @@ def list_to_df_two_point(s2_list:List[np.ndarray],
     df['r'] = df.index
     df_grouped = df.groupby( ['r'] ).agg( {'s2': [np.mean, np.std, np.size] } )
     
-    
-    df_f2_list = [pd.DataFrame(f2, columns = ['f2'] ) for f2 in f2_list]
-    df_f2 = pd.concat(df_f2_list)
-    df_f2['r'] = df_f2.index
-    df_fn_grouped = df_f2.groupby( ['r'] ).agg( {'f2': [np.mean, np.std, np.size] } )  
-        
-    return df_grouped, df_fn_grouped
+    if f2_list is not None:
+            
+        df_f2_list = [pd.DataFrame(f2, columns = ['f2'] ) for f2 in f2_list]
+        df_f2 = pd.concat(df_f2_list)
+        df_f2['r'] = df_f2.index
+        df_fn_grouped = df_f2.groupby( ['r'] ).agg( {'f2': [np.mean, np.std, np.size] } ) 
+
+        return df_grouped, df_fn_grouped
+    else:
+        return df_grouped
 
 
 @jit
@@ -164,7 +167,7 @@ def cal_fn( polytope:np.ndarray, n:int)->np.ndarray:
     fn_r = numerator/ denominator
     return fn_r
 
-def calculate_two_point_3D(images, directional = None):
+def calculate_two_point_3D(images, directional = False):
     """
     This function calculates average two-point correlation in 3D.
     Inputs: 
@@ -245,7 +248,7 @@ def calculate_two_point_3D(images, directional = None):
         s2_list_y = []
         s2_list_z = []
 
-        for i in tqdm( range(images.shape[0]) ):
+        for i in range(images.shape[0]):
 
             two_point_covariance = {}
             for j, direc in enumerate(["x", "y", "z"]) :

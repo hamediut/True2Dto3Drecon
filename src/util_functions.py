@@ -39,13 +39,14 @@ def create_directories(parent_folder, training_params):
 
 #   new_run_folder_name = f"{pref_num}_RES_{training_params['RES']}_ImgSize_{training_params['train_img_size']}_BatchSize_{training_params['batch_size']}_Lrg_{training_params['lrg']}_LrD_{training_params['lrd']}_"
   new_run_folder_name = (
-    f"{pref_num}_RES_{training_params['RES']}_"
+    f"{pref_num}_NumDs{training_params['num_Ds']}_"
+    f"RES_{training_params['RES']}_"
     f"ImgSize_{training_params['train_img_size']}_"
     f"BatchSize_{training_params['batch_size']}_"
     f"D_batch_size_{training_params['D_batch_size']}_"
     f"Lrg_{training_params['lrg']}_"
     f"LrD_{training_params['lrd']}_"
-    f"Lambda_{training_params['Lambda']}"
+    # f"Lambda_{training_params['Lambda']}"
     )
   
 
@@ -84,7 +85,7 @@ def plot_image_grid(image_tensor, nrows=4, ncols = 4, figsize=(4, 4), title = 'x
     plt.tight_layout()
     if output_folder:
        plt.savefig(os.path.join(output_folder, f'{file_name}.png'), dpi =300)
-    # plt.show()
+    plt.close('all')
        
 
   
