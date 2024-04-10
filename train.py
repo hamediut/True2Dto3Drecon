@@ -14,6 +14,7 @@ import pandas as pd
 import random
 import argparse
 import matplotlib.pyplot as plt
+import tifffile
 
 
 import torch
@@ -132,6 +133,8 @@ def train():
    samples = ds1.sample(batch_size= 100, return_s2= None)
 
    batches = [_get_tensor_value(sample.squeeze(1)).astype(np.uint8) for sample in samples]
+   
+
    # print(f'len of batches: {len(batches)}')
    # print(f'shape of batches_0: {batches[0].shape}')
    # print(f'max value in image x: {batches[0].max()}')
@@ -163,11 +166,15 @@ def train():
 
 
    plot_image_grid(batches[0][:16, :, :], nrows= 4, ncols=4, title= 'x-direction',output_folder=current_run_folder, file_name= 'Reals_x')
+   tifffile.imwrite(os.path.join(current_run_folder, 'Real_x.tif'), batches[0])
    if len(batches) == 2:
       plot_image_grid(batches[1][:16, :, :], nrows= 4, ncols=4, title= 'y-direction',output_folder=current_run_folder, file_name= 'Reals_y')
+      tifffile.imwrite(os.path.join(current_run_folder, 'Real_y.tif'), batches[1])
    elif len(batches)==3:
+      plot_image_grid(batches[1][:16, :, :], nrows= 4, ncols=4, title= 'y-direction',output_folder=current_run_folder, file_name= 'Reals_y')
       plot_image_grid(batches[2][:16, :, :], nrows= 4, ncols=4, title= 'z-direction',output_folder=current_run_folder, file_name= 'Reals_z')
-
+      tifffile.imwrite(os.path.join(current_run_folder, 'Real_y.tif'), batches[1])
+      tifffile.imwrite(os.path.join(current_run_folder, 'Real_z.tif'), batches[2])
    # _, _, _, s2_real_avg = ds1.sample(batch_size= 100, return_s2= True)
    joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
    joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
@@ -249,7 +256,10 @@ def train():
       sum_D_loss_real = 0
       sum_D_loss_gen = 0
 
-      for dim, (netD, optimizer, data, d1, d2, d3) in enumerate(zip(netDs, optDs, dataset, [2, 3], [3, 2], [4, 4])):
+      d1s = [2,3] if len(training_data_path) == 2 else [2, 3, 4]
+      d2s = [3,2] if len(training_data_path) == 2 else [3, 2, 2]
+      d3s = [4,4] if len(training_data_path) == 2 else [4, 4, 3]
+      for dim, (netD, optimizer, data, d1, d2, d3) in enumerate(zip(netDs, optDs, dataset, d1s, d2s, d3s)):
               
           if isotropic:
               netD = netDs[0]
@@ -288,7 +298,7 @@ def train():
          noise = torch.randn(args.batch_size, args.z_channels, args.z_size, args.z_size, args.z_size, device=device).contiguous()
          fake = netG(noise) #(batch_size, img_channels, train_img_size, train_img_size, train_img_size)
          
-         for dim, (netD, d1, d2, d3) in enumerate(zip(netDs, [2, 3], [3, 2], [4, 4])):
+         for dim, (netD, d1, d2, d3) in enumerate(zip(netDs, d1s, d2s, d3s)):
 
             if isotropic:
                 #only need one D
