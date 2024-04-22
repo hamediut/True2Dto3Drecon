@@ -19,104 +19,136 @@ from src.util_functions import _get_tensor_value
 from src.SMD_cal import calculate_two_point_list, list_to_df_two_point, calculate_two_point_3D
 
 
+# class Dataset_3BSEs(Dataset):
+#     def __init__(self, image1_path: str,
+#                   image2_path: str,
+#                   image3_path: Optional[str]= None,
+#                   patch_size: int =512,
+#                   resized_to: Optional[int] = None,
+#                   num_samples: int = 15000):
+#         self.image1_path = image1_path
+#         self.image2_path = image2_path
+#         self.image3_path = image3_path
+#         self.patch_size = patch_size
+#         self.num_samples = num_samples
+#         self.resized_to = resized_to
+#         #reading the original large images
+#         # if image is not zero and 1, we put the maximum value =1--> important for s2 calculation
+#         self.image1 = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
+#         self.image2 = np.where(tifffile.imread(self.image2_path) >= 1, 1, 0).astype(np.uint8)
+#         self.image3 = np.where(tifffile.imread(self.image3_path) >= 1, 1, 0).astype(np.uint8) if image3_path is not None else None
+        
+#     def __len__(self):
+#         return self.num_samples  # Set the number of patches you want to extract
+
+#     def __getitem__(self, index):
+#         # Random crop coordinates for image1 and image2
+#         x1 = np.random.randint(0, self.image1.shape[0] - self.patch_size + 1)
+#         y1 = np.random.randint(0, self.image1.shape[1] - self.patch_size + 1)
+        
+#         x2 = np.random.randint(0, self.image2.shape[0] - self.patch_size + 1)
+#         y2 = np.random.randint(0, self.image2.shape[1] - self.patch_size + 1)
+        
+#         # Extract patches for image1 and image2
+#         patch1 = self.image1[x1:x1 + self.patch_size, y1:y1 + self.patch_size]
+#         patch2 = self.image2[x2:x2 + self.patch_size, y2:y2 + self.patch_size]
+
+#         patches = [patch1, patch2]
+
+#         if self.resized_to:
+
+#             resized_pathces = []
+
+#             for patch in patches:
+#                 patch_pil = PIL.Image.fromarray(patch)
+#                 patch_resized = patch_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
+#                 thresh = threshold_otsu(np.array(patch_resized))
+#                 resized_patch = np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
+#                 resized_pathces.append(resized_patch)
+#             patches = resized_pathces
+#         # Convert patches to PyTorch tensors
+#         patches = [torch.from_numpy(patch).unsqueeze(dim=0).type(torch.cuda.FloatTensor) for patch in patches]
+
+#         # If the third image is loaded, process it similarly
+#         if self.image3 is not None:
+#             x3 = np.random.randint(0, self.image3.shape[0] - self.patch_size + 1)
+#             y3 = np.random.randint(0, self.image3.shape[1] - self.patch_size + 1)
+#             patch3 = self.image3[x3:x3 + self.patch_size, y3:y3 + self.patch_size]
+
+#             if self.resized_to:
+#                 patch3_pil = PIL.Image.fromarray(patch3)
+#                 patch3_resized =  patch3_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
+#                 thresh = threshold_otsu(np.array(patch3_resized))
+#                 patch3 = np.where(np.array(patch3_resized) > thresh, 1, 0).astype(np.uint8)
+#             patch3 = torch.from_numpy(patch3).unsqueeze(dim=0).type(torch.cuda.FloatTensor)
+#             patches.append(patch3)
+
+#         return tuple(patches)
+
+#     def sample(self, batch_size, return_s2 =None):
+#         """
+#         This method takes batch_size number of random images from each plane.
+#         If return_s2 = None, it only return the random images as tensors.
+#         If return_s2 =True, it calculates s2 in each plane and return them along with the average value
+#         """
+#         dataloader = DataLoader(self, batch_size= batch_size, shuffle = True)
+        
+#         batches = next(iter(dataloader))
+#         return batches
+#         real_np_x = _get_tensor_value(batch_x)[:, 0, :, :].astype(np.uint8)
+#         real_np_y = _get_tensor_value(batch_y)[:, 0, :, :].astype(np.uint8)
+#         real_np_z = _get_tensor_value(batch_z)[:, 0, :, :].astype(np.uint8)
+
+#         s2_real_X_list, f2_real_X_list = calculate_two_point_list(real_np_x)
+#         s2_real_Y_list, f2_real_Y_list = calculate_two_point_list(real_np_y)
+#         s2_real_Z_list, f2_real_Z_list = calculate_two_point_list(real_np_z)
+
+#         s2_real_X, _ = list_to_df_two_point(s2_real_X_list, f2_real_X_list)
+#         s2_real_Y, _ = list_to_df_two_point(s2_real_Y_list, f2_real_Y_list)
+#         s2_real_Z, _ = list_to_df_two_point(s2_real_Z_list, f2_real_Z_list)
+
+#         s2_real_avg = (s2_real_X['s2']['mean'] + s2_real_Y['s2']['mean'] + s2_real_Y['s2']['mean'])/3
+
+#         if not return_s2:
+
+#             return real_np_x, real_np_y, real_np_z
+#         else:
+#             return s2_real_X, s2_real_Y, s2_real_Z, s2_real_avg
+
+            
+###------------
 class Dataset_3BSEs(Dataset):
-    def __init__(self, image1_path: str,
-                  image2_path: str,
-                  image3_path: Optional[str]= None,
-                  patch_size: int =512,
-                  resized_to: Optional[int] = None,
-                  num_samples: int = 15000):
-        self.image1_path = image1_path
-        self.image2_path = image2_path
-        self.image3_path = image3_path
+    def __init__(self, image_paths, patch_size=512, resized_to=None, num_samples=15000):
+        self.image_paths = image_paths
         self.patch_size = patch_size
         self.num_samples = num_samples
         self.resized_to = resized_to
-        #reading the original large images
-        # if image is not zero and 1, we put the maximum value =1--> important for s2 calculation
-        self.image1 = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
-        self.image2 = np.where(tifffile.imread(self.image2_path) >= 1, 1, 0).astype(np.uint8)
-        self.image3 = np.where(tifffile.imread(self.image3_path) >= 1, 1, 0).astype(np.uint8) if image3_path is not None else None
+        self.images = [np.where(tifffile.imread(path) >= 1, 1, 0).astype(np.uint8) for path in image_paths]
         
     def __len__(self):
-        return self.num_samples  # Set the number of patches you want to extract
+        return self.num_samples
 
     def __getitem__(self, index):
-        # Random crop coordinates for image1 and image2
-        x1 = np.random.randint(0, self.image1.shape[0] - self.patch_size + 1)
-        y1 = np.random.randint(0, self.image1.shape[1] - self.patch_size + 1)
-        
-        x2 = np.random.randint(0, self.image2.shape[0] - self.patch_size + 1)
-        y2 = np.random.randint(0, self.image2.shape[1] - self.patch_size + 1)
-        
-        # Extract patches for image1 and image2
-        patch1 = self.image1[x1:x1 + self.patch_size, y1:y1 + self.patch_size]
-        patch2 = self.image2[x2:x2 + self.patch_size, y2:y2 + self.patch_size]
+        patches = []
+        for image in self.images:
+            x = np.random.randint(0, image.shape[0] - self.patch_size + 1)
+            y = np.random.randint(0, image.shape[1] - self.patch_size + 1)
+            patch = image[x:x + self.patch_size, y:y + self.patch_size]
 
-        patches = [patch1, patch2]
-
-        if self.resized_to:
-
-            resized_pathces = []
-
-            for patch in patches:
+            if self.resized_to:
                 patch_pil = PIL.Image.fromarray(patch)
                 patch_resized = patch_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
                 thresh = threshold_otsu(np.array(patch_resized))
-                resized_patch = np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
-                resized_pathces.append(resized_patch)
-            patches = resized_pathces
-        # Convert patches to PyTorch tensors
-        patches = [torch.from_numpy(patch).unsqueeze(dim=0).type(torch.cuda.FloatTensor) for patch in patches]
+                patch = np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
 
-        # If the third image is loaded, process it similarly
-        if self.image3 is not None:
-            x3 = np.random.randint(0, self.image3.shape[0] - self.patch_size + 1)
-            y3 = np.random.randint(0, self.image3.shape[1] - self.patch_size + 1)
-            patch3 = self.image3[x3:x3 + self.patch_size, y3:y3 + self.patch_size]
-
-            if self.resized_to:
-                patch3_pil = PIL.Image.fromarray(patch3)
-                patch3_resized =  patch3_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
-                thresh = threshold_otsu(np.array(patch3_resized))
-                patch3 = np.where(np.array(patch3_resized) > thresh, 1, 0).astype(np.uint8)
-            patch3 = torch.from_numpy(patch3).unsqueeze(dim=0).type(torch.cuda.FloatTensor)
-            patches.append(patch3)
-
+            patches.append(torch.from_numpy(patch).unsqueeze(0).type(torch.cuda.FloatTensor))
+        
         return tuple(patches)
 
-    def sample(self, batch_size, return_s2 =None):
-        """
-        This method takes batch_size number of random images from each plane.
-        If return_s2 = None, it only return the random images as tensors.
-        If return_s2 =True, it calculates s2 in each plane and return them along with the average value
-        """
-        dataloader = DataLoader(self, batch_size= batch_size, shuffle = True)
-        
+    def sample(self, batch_size, return_s2=None):
+        dataloader = DataLoader(self, batch_size=batch_size, shuffle=True)
         batches = next(iter(dataloader))
-        return batches
-        real_np_x = _get_tensor_value(batch_x)[:, 0, :, :].astype(np.uint8)
-        real_np_y = _get_tensor_value(batch_y)[:, 0, :, :].astype(np.uint8)
-        real_np_z = _get_tensor_value(batch_z)[:, 0, :, :].astype(np.uint8)
-
-        s2_real_X_list, f2_real_X_list = calculate_two_point_list(real_np_x)
-        s2_real_Y_list, f2_real_Y_list = calculate_two_point_list(real_np_y)
-        s2_real_Z_list, f2_real_Z_list = calculate_two_point_list(real_np_z)
-
-        s2_real_X, _ = list_to_df_two_point(s2_real_X_list, f2_real_X_list)
-        s2_real_Y, _ = list_to_df_two_point(s2_real_Y_list, f2_real_Y_list)
-        s2_real_Z, _ = list_to_df_two_point(s2_real_Z_list, f2_real_Z_list)
-
-        s2_real_avg = (s2_real_X['s2']['mean'] + s2_real_Y['s2']['mean'] + s2_real_Y['s2']['mean'])/3
-
-        if not return_s2:
-
-            return real_np_x, real_np_y, real_np_z
-        else:
-            return s2_real_X, s2_real_Y, s2_real_Z, s2_real_avg
-
-            
-        
+        return batches     
 ###--------------------------------------------------------------------------------------
 def evaluate_G(netG, num_img, img_size = 256, z_size = 4, z_channels = 16, directional= False, device = 'cuda'):
 

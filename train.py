@@ -91,13 +91,13 @@ def train():
    
 
    training_data_path = [arg for arg in [args.dir_img_1, args.dir_img_2, args.dir_img_3] if arg is not None]
-   print(f'training data path:{training_data_path}')
+   
 
-   if len(training_data_path)==1:
-      training_data_path *= 3
-      isotropic = True
-   else:
-      isotropic = False
+   # if len(training_data_path)==1:
+   #    training_data_path *= 3
+   #    isotropic = True
+   # else:
+   #    isotropic = False
 
    training_params = {
       'num_Ds': len(training_data_path), 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
@@ -112,12 +112,14 @@ def train():
    joblib.dump(training_params, os.path.join(current_run_folder, 'training_params.pkl'))
 
    Logger(file_name=os.path.join(current_run_folder, 'log.txt'), file_mode='a', should_flush=True)
+   print(f'training data path:{training_data_path}')
    print('--------------------------------')
    print(f'Training parameters: {training_params}')
    print('--------------------------------')
    print(f'Creating output folders. Running folder: {current_run_folder}')
 
    print('--------------------------------')
+   isotropic = True if len(training_data_path)==1 else None
    if isotropic:
       print(f'One 2D image provided --> isotropic microstructure.')
    else:
@@ -126,39 +128,49 @@ def train():
    ### loafing dataset----------------------------------------------
    resized_to = None if args.train_img_size == args.RES else args.train_img_size
    print(f'resized_to is:{resized_to}')
-   ds1 = Dataset_3BSEs(args.dir_img_1, args.dir_img_2, args.dir_img_3,
-                        patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs)
+   # ds1 = Dataset_3BSEs(args.dir_img_1, args.dir_img_2, args.dir_img_3,
+   #                      patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs)
+
+   ds1 = Dataset_3BSEs(image_paths= training_data_path,
+                        patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs) 
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
+   print(f'type of samples: {type(samples)}')
+   print(f'shape of samples:{len(samples)}')
+   print(f'shape of x sample: {samples[0].shape}')
+   if len(samples) == 2:
+      print(f'shape of y sample: {samples[1].shape}')
+   elif len(samples) ==3:
+      print(f'shape of z sample: {samples[2].shape}')
+
 
    batches = [_get_tensor_value(sample.squeeze(1)).astype(np.uint8) for sample in samples]
    
 
-   # print(f'len of batches: {len(batches)}')
-   # print(f'shape of batches_0: {batches[0].shape}')
-   # print(f'max value in image x: {batches[0].max()}')
-   # print(f'shape of batches_1: {batches[1].shape}')
-   # print(f'max value in image y: {batches[1].max()}')
-   # if len(batches) == 3:
-   #    print(f'shape of batches_2: {batches[2].shape}')
-
-   # s2_reals_list = [calculate_two_point_list(batches[i])[0] for i in range(len(batches))]
-
    s2_list_x, f2_list_x = calculate_two_point_list(batches[0])
-   # print(f's2_list_x:{s2_list_x[0]}')
-   s2_list_y, f2_list_y = calculate_two_point_list(batches[1])
-
    s2_df_x, f2_df_x = list_to_df_two_point(s2_list_x, f2_list_x)
-   s2_df_y, f2_df_y = list_to_df_two_point(s2_list_y, f2_list_y)
-   if len(batches) ==3:
+   s2_real_avg = s2_df_x['s2']['mean']
+   f2_real_avg = f2_df_x['f2']['mean']
+
+   joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
+   joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
+   # print(f's2_list_x:{s2_list_x[0]}')
+
+   if len(batches) ==2:
+      s2_list_y, f2_list_y = calculate_two_point_list(batches[1])
+      s2_df_y, f2_df_y = list_to_df_two_point(s2_list_y, f2_list_y)
+      s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] )/2
+      f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] )/2
+      joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
+      joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
+   elif len(batches) ==3:
       s2_list_z, f2_list_z = calculate_two_point_list(batches[2])
       s2_df_z, f2_df_z = list_to_df_two_point(s2_list_z, f2_list_z)
       s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] + s2_df_z['s2']['mean'])/3
       f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] + f2_df_z['f2']['mean'])/3
-   elif len(batches)==2:
-      s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] )/2
-      f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] )/2
+      joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
+      joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
 
    # print(f's2_real_avg: {s2_real_avg}')
    # print(f'f2_real_avg: {f2_real_avg}')
@@ -176,10 +188,9 @@ def train():
       tifffile.imwrite(os.path.join(current_run_folder, 'Real_y.tif'), batches[1])
       tifffile.imwrite(os.path.join(current_run_folder, 'Real_z.tif'), batches[2])
    # _, _, _, s2_real_avg = ds1.sample(batch_size= 100, return_s2= True)
-   joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
-   joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
    
    
+###------------------
    # here we sample 100 images in each plane to calculate average s2.
    # Then, we compute mse between this average and average value of fakes images and use it as a criterion for saving best models.
    # print('Constructing networks...')
@@ -339,17 +350,21 @@ def train():
          plot_image_grid(np.transpose(fake_np_binary[random_stack, :, :, :16], (2, 0, 1)), title= 'Fake-Z',
                          output_folder= plots_imgs_folder, file_name= f'fake_z_iter_{i}')
          plt.figure()
-         plt.plot(s2_df_x.index, s2_df_x['s2']['mean'], color ='b',  label='Real x')
-         plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='b', linestyle ='--',  label='Real y')
-         plt.plot(s2_real_avg, color = 'g', label = 'Real avg')
+         plt.plot(s2_df_x.index, s2_df_x['s2']['mean'], color ='dodgerblue', label='Real x')
+         if len(batches) == 2:
+            plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
+         elif len(batches) ==3:
+            plt.plot(s2_df_z.index, s2_df_z['s2']['mean'], color ='forestgreen', label='Real z')
 
-         plt.plot(s2_fake_x.index, s2_fake_x['s2']['mean'], color ='r', label = 'Fake x')
-         plt.plot(s2_fake_y.index, s2_fake_y['s2']['mean'], color ='r', linestyle ='--', label = 'Fake y')
-         plt.plot(s2_fake_z.index, s2_fake_z['s2']['mean'], color ='r', linestyle =':', label = 'Fake z')
-         plt.plot(s2_fake_3D_avg.index, s2_fake_3D_avg['s2']['mean'], color ='k', label='Fake avg')
+         plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
+
+         plt.plot(s2_fake_x.index, s2_fake_x['s2']['mean'], color ='dodgerblue', linestyle ='--')
+         plt.plot(s2_fake_y.index, s2_fake_y['s2']['mean'], color ='crimson', linestyle ='--')
+         plt.plot(s2_fake_z.index, s2_fake_z['s2']['mean'], color ='forestgreen', linestyle ='--')
+         plt.plot(s2_fake_3D_avg.index, s2_fake_3D_avg['s2']['mean'], color ='k', linestyle ='--')
          plt.xlabel('r(px)', fontsize = 'x-large')
          plt.ylabel('$S_2$', fontsize = 'x-large')
-         plt.legend(ncol =2, fontsize ='large')
+         plt.legend(ncol =1, fontsize ='large')
          plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.4e}')
          plt.savefig(os.path.join(plots_imgs_folder, f's2_iter_{i}.png'), dpi = 300)
          
