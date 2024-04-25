@@ -80,7 +80,7 @@ def parse_args():
   parser.add_argument('--mse_thresh', type = float, default = 5e-5, help= 'if mse btw s2_real and s2_fake is smaller than this, G and D will be saved')
   parser.add_argument('--num_img_eval', type =int, default= 8, help= 'Number of 3D images to generate during the training to calculate s2_fake and mse')
   parser.add_argument('--output_dir', type =str, help = 'Output directory to save models, images etc')
-  parser.add_argument('--resume_nets', type = str, help= 'Path to the folder where the generator and discriminators to resume exist.')
+  parser.add_argument('--resume_nets', type = str, help= 'Path to the folder where the generator and discriminators are saved.')
 #   parser.add_argument('--resume_iter', type = int, help= 'the iteration the model you want to resume for e.g., WGAN_Gen_iter_')
 
   
@@ -91,16 +91,18 @@ def train():
    
 
    training_data_path = [arg for arg in [args.dir_img_1, args.dir_img_2, args.dir_img_3] if arg is not None]
-   
+   num_Ds = len(training_data_path)
 
-   # if len(training_data_path)==1:
-   #    training_data_path *= 3
-   #    isotropic = True
-   # else:
-   #    isotropic = False
+   print(f'Number of training images: {len(training_data_path)}')
+   print(f'Number of discriminators: {num_Ds}')
+   if len(training_data_path)==1:
+      training_data_path *= 3
+      isotropic = True
+   else:
+      isotropic = False
 
    training_params = {
-      'num_Ds': len(training_data_path), 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
+      'num_Ds': num_Ds, 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
       'lrg':args.lrg, 'lrd':args.lrd, 'Lambda': args.Lambda, 'critic_iters': args.critic_iters,
       'z_size': args.z_size, 'train_img_size': args.train_img_size, 'RES': args.RES, 'resume_path': args.resume_nets
       }
@@ -119,15 +121,15 @@ def train():
    print(f'Creating output folders. Running folder: {current_run_folder}')
 
    print('--------------------------------')
-   isotropic = True if len(training_data_path)==1 else None
+   # isotropic = True if len(training_data_path)==1 else None
    if isotropic:
       print(f'One 2D image provided --> isotropic microstructure.')
    else:
-      print(f'{len(training_data_path)} two-dimensional images provided--> anisotropic microstructures.')
+      print(f'{num_Ds} two-dimensional images provided--> anisotropic microstructures.')
 
    ### loafing dataset----------------------------------------------
    resized_to = None if args.train_img_size == args.RES else args.train_img_size
-   print(f'resized_to is:{resized_to}')
+   print(f'Training images resized from {args.RES} to {args.train_img_size}')
    # ds1 = Dataset_3BSEs(args.dir_img_1, args.dir_img_2, args.dir_img_3,
    #                      patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs)
 
@@ -136,12 +138,12 @@ def train():
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
-   print(f'type of samples: {type(samples)}')
-   print(f'shape of samples:{len(samples)}')
+   # print(f'type of samples: {type(samples)}')
+   print(f'size of samples:{len(samples)}')
    print(f'shape of x sample: {samples[0].shape}')
-   if len(samples) == 2:
+   if len(samples) >= 2:
       print(f'shape of y sample: {samples[1].shape}')
-   elif len(samples) ==3:
+   if len(samples) ==3:
       print(f'shape of z sample: {samples[2].shape}')
 
 
@@ -153,29 +155,21 @@ def train():
    s2_real_avg = s2_df_x['s2']['mean']
    f2_real_avg = f2_df_x['f2']['mean']
 
-   joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
-   joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
    # print(f's2_list_x:{s2_list_x[0]}')
 
-   if len(batches) ==2:
+   if len(batches) >=2:
       s2_list_y, f2_list_y = calculate_two_point_list(batches[1])
       s2_df_y, f2_df_y = list_to_df_two_point(s2_list_y, f2_list_y)
       s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] )/2
       f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] )/2
-      joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
-      joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
-   elif len(batches) ==3:
+   if len(batches) ==3:
       s2_list_z, f2_list_z = calculate_two_point_list(batches[2])
       s2_df_z, f2_df_z = list_to_df_two_point(s2_list_z, f2_list_z)
       s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] + s2_df_z['s2']['mean'])/3
       f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] + f2_df_z['f2']['mean'])/3
-      joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
-      joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
 
-   # print(f's2_real_avg: {s2_real_avg}')
-   # print(f'f2_real_avg: {f2_real_avg}')
-
-
+   joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
+   joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
 
    plot_image_grid(batches[0][:16, :, :], nrows= 4, ncols=4, title= 'x-direction',output_folder=current_run_folder, file_name= 'Reals_x')
    tifffile.imwrite(os.path.join(current_run_folder, 'Real_x.tif'), batches[0])
@@ -229,7 +223,7 @@ def train():
          netD = (nn.DataParallel(netD, list(range(args.gpu)))).to(device)
       netDs.append(netD)
       optDs.append(optim.Adam(netDs[i].parameters(), lr= args.lrd, betas= (0.5, 0.99)))
-
+   # print(f'Number of Ds: {len(netDs)}')
    print('-----------------------------')
 
    if args.resume_nets:
@@ -258,7 +252,7 @@ def train():
       netG.train()
       dataset = [i for i in data_batches] # this is the first, second, and third images in your training dataset
       len_dataset = len(dataset) # = 3
-      # print(len_dataset)
+      # print(f'number of dataset in training loop: {len_dataset}')
       # print(dataset[0].shape)
       # print(dataset[1].shape)
 
@@ -271,7 +265,7 @@ def train():
       d2s = [3,2] if len(training_data_path) == 2 else [3, 2, 2]
       d3s = [4,4] if len(training_data_path) == 2 else [4, 4, 3]
       for dim, (netD, optimizer, data, d1, d2, d3) in enumerate(zip(netDs, optDs, dataset, d1s, d2s, d3s)):
-              
+         #  print(f'dimension: {dim}')
           if isotropic:
               netD = netDs[0]
               optimizer = optDs[0]
@@ -353,9 +347,10 @@ def train():
          plt.plot(s2_df_x.index, s2_df_x['s2']['mean'], color ='dodgerblue', label='Real x')
          if len(batches) == 2:
             plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
+            # plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
          elif len(batches) ==3:
+            plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
             plt.plot(s2_df_z.index, s2_df_z['s2']['mean'], color ='forestgreen', label='Real z')
-
          plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
 
          plt.plot(s2_fake_x.index, s2_fake_x['s2']['mean'], color ='dodgerblue', linestyle ='--')
@@ -373,8 +368,8 @@ def train():
          if (mse_3d_avg < args.mse_thresh) or i % 10000 == 0:
             
             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
-            for D_index in range(len_dataset):
-                   torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+            # for D_index in range(len_dataset):
+            #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
             if mse_3d_avg < min_mse:
                 #removing the previous best model in the folder cause they're not the best anymore
@@ -382,8 +377,8 @@ def train():
                     os.remove(filename) 
                 # save the checkpoint as the best model
                 torch.save(netG.state_dict(), os.path.join(best_folder, f'WGAN_Gen_iter_{i}.pt'))
-               #  for D_index in range(len_dataset):
-               #     torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+                for D_index in range(len_dataset):
+                   torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 
                 # updating the minimum mse 
                 min_mse = mse_3d_avg
