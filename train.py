@@ -52,7 +52,7 @@ def parse_args():
                         help='Full path to the 2D image taken from plane 2. it should be .tif file')
   parser.add_argument('--dir_img_3', type=str,
                         help='Full path to 2D image taken on plane 3. it should be .tif file')
-  parser.add_argument('--RES', required= True, type = int,
+  parser.add_argument('--RES', required= True, type = int, nargs = '+',
                       help = 'Representative image size' )
   parser.add_argument('--train_img_size', type= int, default= None,
                       help = 'training image size, it can be smaller than RES. if None, no resizing and RES will be used for training image size')
@@ -127,14 +127,18 @@ def train():
    else:
       print(f'{num_Ds} two-dimensional images provided--> anisotropic microstructures.')
 
-   ### loafing dataset----------------------------------------------
-   resized_to = None if args.train_img_size == args.RES else args.train_img_size
-   print(f'Training images resized from {args.RES} to {args.train_img_size}')
+   ### loading dataset----------------------------------------------
+
+   # resized_to = None if args.train_img_size == args.RES else args.train_img_size
+   args.RES = args.RES * len(training_data_path) if len(args.RES) ==1 else args.RES
+   resized_to = [args.train_img_size] * len(training_data_path)
+   # print(f'Training images resized from {args.RES} to {args.train_img_size}')
+   print(f'Training images resized from {args.RES} to {resized_to}')
    # ds1 = Dataset_3BSEs(args.dir_img_1, args.dir_img_2, args.dir_img_3,
    #                      patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs)
 
    ds1 = Dataset_3BSEs(image_paths= training_data_path,
-                        patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs) 
+                        patch_sizes = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs) 
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
@@ -324,7 +328,7 @@ def train():
          
          print(f"Iteration= {i} \t Gen_loss={losses_dict['gen'][-1]: .3f} \t D_loss_real={losses_dict['disc_loss_real'][-1]:.3f} \t D_loss_gen={losses_dict['disc_loss_gen'][-1]:.3f}")
       
-      if (i % args.save_every == 0)  and (i >= 50):
+      if (i % args.save_every == 0)  and (i >= 3000):
          print(f"Evaluating the model...")
          random_stack = np.random.randint(0 , args.num_img_eval)
 

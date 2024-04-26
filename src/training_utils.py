@@ -118,9 +118,9 @@ from src.SMD_cal import calculate_two_point_list, list_to_df_two_point, calculat
             
 ###------------
 class Dataset_3BSEs(Dataset):
-    def __init__(self, image_paths, patch_size=512, resized_to=None, num_samples=15000):
+    def __init__(self, image_paths, patch_sizes=512, resized_to=None, num_samples=15000):
         self.image_paths = image_paths
-        self.patch_size = patch_size
+        self.patch_sizes = patch_sizes
         self.num_samples = num_samples
         self.resized_to = resized_to
         self.images = [np.where(tifffile.imread(path) >= 1, 1, 0).astype(np.uint8) for path in image_paths]
@@ -130,14 +130,14 @@ class Dataset_3BSEs(Dataset):
 
     def __getitem__(self, index):
         patches = []
-        for image in self.images:
-            x = np.random.randint(0, image.shape[0] - self.patch_size + 1)
-            y = np.random.randint(0, image.shape[1] - self.patch_size + 1)
-            patch = image[x:x + self.patch_size, y:y + self.patch_size]
+        for image, patch_size, resized_to in zip(self.images, self.patch_sizes, self.resized_to):
+            x = np.random.randint(0, image.shape[0] - patch_size + 1)
+            y = np.random.randint(0, image.shape[1] - patch_size + 1)
+            patch = image[x:x + patch_size, y:y + patch_size]
 
-            if self.resized_to:
+            if resized_to != patch_size:
                 patch_pil = PIL.Image.fromarray(patch)
-                patch_resized = patch_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
+                patch_resized = patch_pil.resize((resized_to, resized_to), PIL.Image.LANCZOS)
                 thresh = threshold_otsu(np.array(patch_resized))
                 patch = np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
 
