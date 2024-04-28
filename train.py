@@ -53,7 +53,7 @@ def parse_args():
   parser.add_argument('--dir_img_3', type=str,
                         help='Full path to 2D image taken on plane 3. it should be .tif file')
   parser.add_argument('--RES', required= True, type = int, nargs = '+',
-                      help = 'Representative image size' )
+                      help = 'Representative image size. provide multiple values with space if the resolution of images are different. if a size is different than training image size, it will be resized.' )
   parser.add_argument('--train_img_size', type= int, default= None,
                       help = 'training image size, it can be smaller than RES. if None, no resizing and RES will be used for training image size')
   parser.add_argument('--img_channels', type= int, default= 1,
@@ -241,7 +241,7 @@ def train():
       if len(training_data_path)==3:
          netDs[2].load_state_dict(torch.load(os.path.join(args.resume_nets, f'WGAN_Disc2_iter_{iter_num}.pt')))
 
-
+   iter_num = int(iter_num) if args.resume_nets else 1
    print('training loop started...')
 
    losses_dict = {}
@@ -252,7 +252,7 @@ def train():
    mse_dict= {}
    min_mse = 1 # we start with a large error and update it with the minimum mse obtained
 
-   for i, data_batches in enumerate(dataloader, start = 1):
+   for i, data_batches in enumerate(dataloader, start = iter_num):
       netG.train()
       dataset = [i for i in data_batches] # this is the first, second, and third images in your training dataset
       len_dataset = len(dataset) # = 3

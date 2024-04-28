@@ -32,15 +32,21 @@ def create_directories(parent_folder, training_params):
      os.makedirs(run_folders)
 
   num_previous_runs = len(list(os.listdir(run_folders)))
-  run_number = 1 if num_previous_runs ==0 else num_previous_runs + 1
+
+  # run_number = 1 if num_previous_runs ==0 else num_previous_runs + 1
+  # create a folder after the last run based on the run number not the number of folders in the folder
+  last_runs_num = [int(i.split('_')[0]) for i in list(os.listdir(run_folders))]
+  run_number = 1 if num_previous_runs ==0 else max(last_runs_num) +1
 
   num_zero = 3 - len(str(run_number)) # e.g., run_number  = 10 --> num_zero = 1
   pref_num = num_zero * str(0) + str(run_number) # e.g., 010
 
 #   new_run_folder_name = f"{pref_num}_RES_{training_params['RES']}_ImgSize_{training_params['train_img_size']}_BatchSize_{training_params['batch_size']}_Lrg_{training_params['lrg']}_LrD_{training_params['lrd']}_"
+  # If two different resolutions, then training_params['RES'] would be a list and causes problem in folder name:
+  RES = training_params['RES'][0] if type(training_params['RES']) ==list else training_params['RES'] 
   new_run_folder_name = (
     f"{pref_num}_NumDs{training_params['num_Ds']}_"
-    f"RES_{training_params['RES']}_"
+    f"RES_{RES}_"
     f"ImgSize_{training_params['train_img_size']}_"
     f"BatchSize_{training_params['batch_size']}_"
     f"D_batch_size_{training_params['D_batch_size']}_"

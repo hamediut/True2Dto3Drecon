@@ -45,6 +45,7 @@ def parse_args():
                       help = 'number of channels. Default is 1 (binary image)')
   parser.add_argument('--z_channels', type = int, default = 16,
                       help = 'number of channles in noise vector.')
+  parser.add_argument('--manual_thresh', type =float, default = None, help= 'Threshold value for generated images. if None, otsu threshold is applied')
   parser.add_argument('--radius', type= int, default = 0, help= 'if > 0, the generated images will be post-processed with a spherical structuring element of specificed radius in pixels ')
 
   return parser.parse_args()
@@ -84,9 +85,9 @@ def gen_img():
    model_name = args.G_pkl.split('\\')[-1] # get the file name at the end of the path e.g., WGAN_Gen_iter_11500.pt
    iter_num = model_name.split('_')[-1].split('.')[0] # get the iteration number of the best model: 11500 for example
    if args.output_dir:
-      output_folder = os.path.join(args.output_dir, f'inference_G_{iter_num}_Zsize{args.z_size}_ball_{args.radius}')
+      output_folder = os.path.join(args.output_dir, f'inference_G_{iter_num}_thresh{args.manual_thresh}_ball_{args.radius}')
    else:
-      output_folder = os.path.join(os.getcwd(), f'inference_G_{iter_num}_Zsize{args.z_size}_ball_{args.radius}')
+      output_folder = os.path.join(os.getcwd(), f'inference_G_{iter_num}_thresh{args.manual_thresh}_ball_{args.radius}')
 #    output_folder = args.output_dir if args.output_dir else os.getcwd()
    print(f'Generated images will be saved in: {output_folder}')
    if not os.path.exists(output_folder):
@@ -104,7 +105,7 @@ def gen_img():
       num = num_zero * str(0) + str(i)
       noise = torch.randn(1, args.z_channels, args.z_size, args.z_size, args.z_size, device=device)
       fake_np = _get_tensor_value(netG(noise))[0, 0, :, :, :]
-      thresh = threshold_otsu(fake_np)
+      thresh =  args.manual_thresh if args.manual_thresh else threshold_otsu(fake_np)
       fake_np_binary = np.where(fake_np > thresh, 1, 0).astype(np.uint8)
       ## post-processing
       if args.radius > 0:
