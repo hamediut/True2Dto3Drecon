@@ -81,6 +81,10 @@ def parse_args():
   parser.add_argument('--num_img_eval', type =int, default= 8, help= 'Number of 3D images to generate during the training to calculate s2_fake and mse')
   parser.add_argument('--output_dir', type =str, help = 'Output directory to save models, images etc')
   parser.add_argument('--resume_nets', type = str, help= 'Path to the folder where the generator and discriminators are saved.')
+
+  parser.add_argument('--loss', type = str, default= 'wgan-gp', help= 'Loss function. choose between wgan-gp or bce-r1 (binary cross entropy with R1 resularization)')
+  parser.add_argument('--gamma', type = float, default = 1, help = 'gamma coefficient of r1 regularization.')
+  parser.add_argument('--print_every', type = int, default= 10, help = 'how often print losses')
 #   parser.add_argument('--resume_iter', type = int, help= 'the iteration the model you want to resume for e.g., WGAN_Gen_iter_')
 
   
@@ -102,7 +106,7 @@ def train():
       isotropic = False
 
    training_params = {
-      'num_Ds': num_Ds, 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
+      'loss': args.loss,'gamma': args.gamma,'num_Ds': num_Ds, 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
       'lrg':args.lrg, 'lrd':args.lrd, 'Lambda': args.Lambda, 'critic_iters': args.critic_iters,
       'z_size': args.z_size, 'train_img_size': args.train_img_size, 'RES': args.RES, 'resume_path': args.resume_nets
       }
@@ -277,58 +281,99 @@ def train():
           netD.zero_grad()
 
           real_data = data.to(device)
-          out_real = netD(real_data).view(-1).mean()
-
           fake_data_perm = fake_data.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.D_batch_size,
-                                                                        args.img_channels, args.train_img_size,
-                                                                          args.train_img_size)
+                                                                              args.img_channels, args.train_img_size,
+                                                                              args.train_img_size)
           out_fake = netD(fake_data_perm).mean()
+         #  print(f'out_fake:{out_fake}')
+          ##WGAN-GP
+          if args.loss == 'wgan-gp':
+         
+             out_real = netD(real_data).view(-1).mean()
 
-          # compute gradient penalty
-          g_penalty = calc_gradient_penalty(netD, real_data, fake_data_perm[:args.batch_size],
-                                             args.batch_size, args.train_img_size,
-                                             device, args.Lambda, args.img_channels)
-          disc_cost = out_fake - out_real + g_penalty
+            #  fake_data_perm = fake_data.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.D_batch_size,
+            #                                                                   args.img_channels, args.train_img_size,
+            #                                                                   args.train_img_size)
+            #  out_fake = netD(fake_data_perm).mean()
 
-          sum_D_loss_real += _get_tensor_value(out_real + g_penalty)
-          sum_D_loss_gen  += _get_tensor_value(out_fake)
+             # compute gradient penalty
+             g_penalty = calc_gradient_penalty(netD, real_data, fake_data_perm[:args.batch_size],
+                                                   args.batch_size, args.train_img_size,
+                                                   device, args.Lambda, args.img_channels)
+             disc_cost = out_fake - out_real + g_penalty
 
-          disc_cost.backward()
-          optimizer.step()
+             sum_D_loss_real += _get_tensor_value(out_real + g_penalty)
+             sum_D_loss_gen  += _get_tensor_value(out_fake)
+
+             disc_cost.backward()
+             optimizer.step()
+         
+          elif args.loss == 'bce-r1':
+             real_data_temp = real_data.detach().requires_grad_(True)
+             out_real = netD(real_data_temp).view(-1).mean()
+            #  print(f'out_real: {out_real}')
+             real_loss = torch.mean(torch.nn.functional.softplus(-out_real))
+            #  print(f'real_loss: {real_loss}')
+             fake_loss = torch.mean(torch.nn.functional.softplus(out_fake))
+            #  print(f'fake_loss: {fake_loss}')
+
+             ## R1 regularization
+             real_grads = torch.autograd.grad(
+                outputs = [out_real.sum()],
+                inputs = [real_data_temp],
+                create_graph= True,
+                only_inputs= True 
+             )[0]
+            #  print(f'real_grads shape:{real_grads.shape}')
+             r1_penalty = real_grads.square().sum([1,2,3])
+             r1_penalty = (args.gamma/2) * r1_penalty
+            #  print(f'r1_penalty: {r1_penalty}')
+
+             disc_cost = (real_loss + r1_penalty).mean() + fake_loss
+             sum_D_loss_real += _get_tensor_value((real_loss + r1_penalty).mean())
+             sum_D_loss_gen  += _get_tensor_value(out_fake)
+
+             disc_cost.backward()
+             optimizer.step()
+         
 
       joblib.dump(losses_dict, os.path.join(current_run_folder, 'disc_losses.pkl'))
 
       # training G
-      if i % args.critic_iters ==0:
+      # if i % args.critic_iters ==0:
          
-         
-         netG.zero_grad()
-         errG = 0
-         noise = torch.randn(args.batch_size, args.z_channels, args.z_size, args.z_size, args.z_size, device=device).contiguous()
-         fake = netG(noise) #(batch_size, img_channels, train_img_size, train_img_size, train_img_size)
-         
-         for dim, (netD, d1, d2, d3) in enumerate(zip(netDs, d1s, d2s, d3s)):
-
-            if isotropic:
-                #only need one D
-                netD = netDs[0]
-            # permute and reshape to feed to disc
-            fake_data_perm = fake.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.batch_size, args.img_channels, 
-                                                                    args.train_img_size, args.train_img_size)
-            #fake_data_perm: (32, 64, 2, 64, 64) --> reshape to : (32 *64 = 2048, 2, 64, 64)
-            output = netD(fake_data_perm)
-            errG -= output.mean()
-
-         errG.backward()
-         optG.step()
-
-         losses_dict['gen'].append(float(_get_tensor_value(errG)))
-         losses_dict['disc_loss_real'].append(sum_D_loss_real/len_dataset) # average loss of Ds
-         losses_dict['disc_loss_gen'].append(sum_D_loss_gen/len_dataset)
-         
-         print(f"Iteration= {i} \t Gen_loss={losses_dict['gen'][-1]: .3f} \t D_loss_real={losses_dict['disc_loss_real'][-1]:.3f} \t D_loss_gen={losses_dict['disc_loss_gen'][-1]:.3f}")
+      netG.zero_grad()
+      errG = 0
+      noise = torch.randn(args.batch_size, args.z_channels, args.z_size, args.z_size, args.z_size, device=device).contiguous()
+      fake = netG(noise) #(batch_size, img_channels, train_img_size, train_img_size, train_img_size)
       
-      if (i % args.save_every == 0)  and (i >= 3000):
+      for dim, (netD, d1, d2, d3) in enumerate(zip(netDs, d1s, d2s, d3s)):
+
+         if isotropic:
+               #only need one D
+               netD = netDs[0]
+         # permute and reshape to feed to disc
+         fake_data_perm = fake.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.batch_size, args.img_channels, 
+                                                                  args.train_img_size, args.train_img_size)
+         #fake_data_perm: (32, 64, 2, 64, 64) --> reshape to : (32 *64 = 2048, 2, 64, 64)
+         output = netD(fake_data_perm)
+         # print(f'output shape: {output.shape}')
+         if args.loss == 'wgan-gp':
+            errG -= output.mean()
+         elif args.loss == 'bce-r1':
+            gen_loss = torch.mean(torch.nn.functional.softplus(-output))
+            errG += gen_loss
+      errG.backward()
+      optG.step()
+
+      losses_dict['gen'].append(float(_get_tensor_value(errG)))
+      losses_dict['disc_loss_real'].append(sum_D_loss_real/len_dataset) # average loss of Ds
+      losses_dict['disc_loss_gen'].append(sum_D_loss_gen/len_dataset)
+
+      if i % args.print_every ==0:
+         print(f"Iteration= {i} \t Gen_loss={losses_dict['gen'][-1]: .3f} \t D_loss_real={losses_dict['disc_loss_real'][-1]:.3f} \t D_loss_gen={losses_dict['disc_loss_gen'][-1]:.3f}")
+
+      if i % args.save_every == 0:
          print(f"Evaluating the model...")
          random_stack = np.random.randint(0 , args.num_img_eval)
 

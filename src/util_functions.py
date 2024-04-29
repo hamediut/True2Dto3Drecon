@@ -45,13 +45,13 @@ def create_directories(parent_folder, training_params):
   # If two different resolutions, then training_params['RES'] would be a list and causes problem in folder name:
   RES = training_params['RES'][0] if type(training_params['RES']) ==list else training_params['RES'] 
   new_run_folder_name = (
-    f"{pref_num}_NumDs{training_params['num_Ds']}_"
-    f"RES_{RES}_"
+    f"{pref_num}_Loss_{training_params['loss']}_gamma{training_params['gamma']}_"
+    f"NumDs{training_params['num_Ds']}_RES{RES}_"
     f"ImgSize_{training_params['train_img_size']}_"
-    f"BatchSize_{training_params['batch_size']}_"
-    f"D_batch_size_{training_params['D_batch_size']}_"
-    f"Lrg_{training_params['lrg']}_"
-    f"LrD_{training_params['lrd']}"
+    f"BatchSize{training_params['batch_size']}_"
+    f"D_batch_size{training_params['D_batch_size']}_"
+    f"Lrg{training_params['lrg']}_"
+    f"LrD{training_params['lrd']}"
     # f"Lambda_{training_params['Lambda']}"
     )
   
