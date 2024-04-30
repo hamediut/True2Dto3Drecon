@@ -27,7 +27,7 @@ from skimage.metrics import mean_squared_error
 from src.training_utils import Dataset_3BSEs, calc_gradient_penalty, evaluate_G, Logger
 from src.util_functions import _get_tensor_value, create_directories, plot_image_grid
 from src.SMD_cal import calculate_two_point_list, list_to_df_two_point, calculate_two_point_3D
-
+from src.metric_fid import compute_stats, calculate_frechet_distance
 from src.networks import Generator, Discriminator
 
 seed =33
@@ -85,6 +85,11 @@ def parse_args():
   parser.add_argument('--loss', type = str, default= 'wgan-gp', help= 'Loss function. choose between wgan-gp or bce-r1 (binary cross entropy with R1 resularization)')
   parser.add_argument('--gamma', type = float, default = 1, help = 'gamma coefficient of r1 regularization.')
   parser.add_argument('--print_every', type = int, default= 10, help = 'how often print losses')
+  parser.add_argument('--batch_size_fid', type = int, default= 8, help = 'batch size for Inception model to calculate FID')
+  parser.add_argument('--dims', type= int, default = 2048, help= 'dimensionality of features in inception model')
+  parser.add_argument('--num_workers', type= int, default = 0, help= 'number of cpu for fid calculations')
+  parser.add_argument('--fid_thresh', type = int, default= 20, help= 'the threshold value to save model')
+  
 #   parser.add_argument('--resume_iter', type = int, help= 'the iteration the model you want to resume for e.g., WGAN_Gen_iter_')
 
   
@@ -92,7 +97,6 @@ def parse_args():
 
 def train():
    args = parse_args()
-   
 
    training_data_path = [arg for arg in [args.dir_img_1, args.dir_img_2, args.dir_img_3] if arg is not None]
    num_Ds = len(training_data_path)
@@ -118,6 +122,15 @@ def train():
    joblib.dump(training_params, os.path.join(current_run_folder, 'training_params.pkl'))
 
    Logger(file_name=os.path.join(current_run_folder, 'log.txt'), file_mode='a', should_flush=True)
+
+   print('-----------------------------')
+   print('Checking cuda availability...')
+   cuda = torch.cuda.is_available()
+   print('Active CUDA Device: GPU', torch.cuda.current_device())
+   print ('Available devices ', torch.cuda.device_count())
+   print ('Current cuda device ', torch.cuda.current_device())
+   device = torch.device("cuda:0" if(torch.cuda.is_available() and args.ngpu > 0) else "cpu")
+
    print(f'training data path:{training_data_path}')
    print('--------------------------------')
    print(f'Training parameters: {training_params}')
@@ -146,6 +159,8 @@ def train():
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
+   samples_fid = ds1.sample(batch_size= 2048, return_s2= None)
+   
    # print(f'type of samples: {type(samples)}')
    print(f'size of samples:{len(samples)}')
    print(f'shape of x sample: {samples[0].shape}')
@@ -156,12 +171,16 @@ def train():
 
 
    batches = [_get_tensor_value(sample.squeeze(1)).astype(np.uint8) for sample in samples]
+   batches_fid = [_get_tensor_value(sample.squeeze(1)).astype(np.uint8) for sample in samples_fid]
    
 
    s2_list_x, f2_list_x = calculate_two_point_list(batches[0])
    s2_df_x, f2_df_x = list_to_df_two_point(s2_list_x, f2_list_x)
    s2_real_avg = s2_df_x['s2']['mean']
    f2_real_avg = f2_df_x['f2']['mean']
+
+   m_real_x, s_real_x = compute_stats(batches_fid[0], args.batch_size_fid, device, args.dims,
+                               args.num_workers, output_path=current_run_folder, plane='x' )
 
    # print(f's2_list_x:{s2_list_x[0]}')
 
@@ -170,23 +189,31 @@ def train():
       s2_df_y, f2_df_y = list_to_df_two_point(s2_list_y, f2_list_y)
       s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] )/2
       f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] )/2
+
+      #mu_y, s_y
+      m_real_y, s_real_y = compute_stats(batches_fid[1], args.batch_size_fid, device, args.dims,
+                               args.num_workers, output_path=current_run_folder, plane='y')
    if len(batches) ==3:
       s2_list_z, f2_list_z = calculate_two_point_list(batches[2])
       s2_df_z, f2_df_z = list_to_df_two_point(s2_list_z, f2_list_z)
       s2_real_avg = (s2_df_x['s2']['mean'] + s2_df_y['s2']['mean'] + s2_df_z['s2']['mean'])/3
       f2_real_avg = (f2_df_x['f2']['mean'] + f2_df_y['f2']['mean'] + f2_df_z['f2']['mean'])/3
 
+      #mu_z, s_z
+      m_real_z, s_real_z = compute_stats(batches_fid[2], args.batch_size_fid, device, args.dims,
+                               args.num_workers, output_path=current_run_folder, plane='z')
+
    joblib.dump(s2_real_avg, os.path.join(current_run_folder, 's2_real_avg.pkl'))
    joblib.dump(f2_real_avg, os.path.join(current_run_folder, 'f2_real_avg.pkl'))
 
-   plot_image_grid(batches[0][:16, :, :], nrows= 4, ncols=4, title= 'x-direction',output_folder=current_run_folder, file_name= 'Reals_x')
+   plot_image_grid(batches[0][:16, :, :], nrows= 4, ncols=4, title= 'x-direction', output_folder=current_run_folder, file_name= 'Reals_x')
    tifffile.imwrite(os.path.join(current_run_folder, 'Real_x.tif'), batches[0])
    if len(batches) == 2:
-      plot_image_grid(batches[1][:16, :, :], nrows= 4, ncols=4, title= 'y-direction',output_folder=current_run_folder, file_name= 'Reals_y')
+      plot_image_grid(batches[1][:16, :, :], nrows= 4, ncols=4, title= 'y-direction', output_folder=current_run_folder, file_name= 'Reals_y')
       tifffile.imwrite(os.path.join(current_run_folder, 'Real_y.tif'), batches[1])
    elif len(batches)==3:
-      plot_image_grid(batches[1][:16, :, :], nrows= 4, ncols=4, title= 'y-direction',output_folder=current_run_folder, file_name= 'Reals_y')
-      plot_image_grid(batches[2][:16, :, :], nrows= 4, ncols=4, title= 'z-direction',output_folder=current_run_folder, file_name= 'Reals_z')
+      plot_image_grid(batches[1][:16, :, :], nrows= 4, ncols=4, title= 'y-direction', output_folder=current_run_folder, file_name= 'Reals_y')
+      plot_image_grid(batches[2][:16, :, :], nrows= 4, ncols=4, title= 'z-direction', output_folder=current_run_folder, file_name= 'Reals_z')
       tifffile.imwrite(os.path.join(current_run_folder, 'Real_y.tif'), batches[1])
       tifffile.imwrite(os.path.join(current_run_folder, 'Real_z.tif'), batches[2])
    # _, _, _, s2_real_avg = ds1.sample(batch_size= 100, return_s2= True)
@@ -206,13 +233,7 @@ def train():
    df, gf = [args.img_channels, 64, 128, 256, 512, 1024, 2048, 1], [args.z_channels, 2048, 1024, 512, 256, 128, 64, 64,  args.img_channels]
    dp, gp = [1, 1, 1, 1, 1, 1, 1,], [2] * 8 # for res = 256, sticking to rules for checkerboard
 
-   print('-----------------------------')
-   print('Checking cuda availability...')
-   cuda = torch.cuda.is_available()
-   print('Active CUDA Device: GPU', torch.cuda.current_device())
-   print ('Available devices ', torch.cuda.device_count())
-   print ('Current cuda device ', torch.cuda.current_device())
-   device = torch.device("cuda:0" if(torch.cuda.is_available() and args.ngpu > 0) else "cpu")
+
    # print('-----------------------------')
    
    netG = Generator(num_layers= lays, gf=gf, gk=gk, gs=gs, gp=gp).to(device)
@@ -254,8 +275,10 @@ def train():
    losses_dict['disc_loss_gen'] = []
 
    mse_dict= {}
+   fid_dict = {}
+   # fid_dict['']
    min_mse = 1 # we start with a large error and update it with the minimum mse obtained
-
+   min_fid = 50
    for i, data_batches in enumerate(dataloader, start = iter_num):
       netG.train()
       dataset = [i for i in data_batches] # this is the first, second, and third images in your training dataset
@@ -411,16 +434,55 @@ def train():
          plt.legend(ncol =1, fontsize ='large')
          plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.4e}')
          plt.savefig(os.path.join(plots_imgs_folder, f's2_iter_{i}.png'), dpi = 300)
+
+         # metric FID
+         m_fake_x, s_fake_x = compute_stats(np.concatenate(fake_np_binary, axis =0), args.batch_size_fid, device, args.dims,
+                               args.num_workers)
+         fake_y_test = np.concatenate(np.transpose(fake_np_binary, axes = (0, 2, 1, 3)), axis = 0)
+         m_fake_y, s_fake_y = compute_stats(np.concatenate(fake_y_test, axis =0), args.batch_size_fid, device, args.dims,
+                               args.num_workers)
+         fake_z_test = np.concatenate(np.transpose(fake_np_binary, axes = (0, 3, 1, 2)), axis = 0)
+         m_fake_z, s_fake_z = compute_stats(np.concatenate(fake_z_test, axis =0), args.batch_size_fid, device, args.dims,
+                               args.num_workers)
+         
+         fid_x = calculate_frechet_distance(m_real_x, s_real_x, m_fake_x, s_fake_x)
+         if len(batches)>=2:
+            fid_y = calculate_frechet_distance(m_real_y, s_real_y, m_fake_y, s_fake_y)
+            fid_avg = (fid_x + fid_y)/2
+         if len(batches) ==3:
+            fid_z = calculate_frechet_distance(m_real_z, s_real_z, m_fake_z, s_fake_z)
+            fid_avg = (fid_x + fid_y + fid_z)/3
+
+         print(f"Frechet Inception Distance(FID) = {fid_avg}")
          
          ## saving models---------------------------------
          
-         if (mse_3d_avg < args.mse_thresh) or i % 10000 == 0:
+#          if (mse_3d_avg < args.mse_thresh) or i % 10000 == 0:
+            
+#             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
+#             # for D_index in range(len_dataset):
+#             #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+# #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
+#             if mse_3d_avg < min_mse:
+#                 #removing the previous best model in the folder cause they're not the best anymore
+#                 for filename in glob(os.path.join(best_folder, 'WGAN*')):
+#                     os.remove(filename) 
+#                 # save the checkpoint as the best model
+#                 torch.save(netG.state_dict(), os.path.join(best_folder, f'WGAN_Gen_iter_{i}.pt'))
+#                 for D_index in range(len_dataset):
+#                    torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+
+#                 # updating the minimum mse 
+#                 min_mse = mse_3d_avg
+
+         ###--------------based on FID
+         if (fid_avg < args.fid_thresh) or i % 10000 == 0:
             
             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
             # for D_index in range(len_dataset):
             #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
-            if mse_3d_avg < min_mse:
+            if fid_avg < min_fid:
                 #removing the previous best model in the folder cause they're not the best anymore
                 for filename in glob(os.path.join(best_folder, 'WGAN*')):
                     os.remove(filename) 
@@ -430,8 +492,7 @@ def train():
                    torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 
                 # updating the minimum mse 
-                min_mse = mse_3d_avg
-
+                min_fid = fid_avg
 
 if __name__== "__main__":
     train() 

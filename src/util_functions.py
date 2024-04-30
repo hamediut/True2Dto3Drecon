@@ -73,6 +73,10 @@ def create_directories(parent_folder, training_params):
   if not os.path.exists(plots_imgs_folder):
     os.makedirs(plots_imgs_folder)
 
+  # metric_folder = os.path.join(current_run_folder, 'metrics')
+  # if not os.path.exists(metric_folder):
+  #   os.makedirs(metric_folder)
+
   return current_run_folder, checkpoints_folder, best_folder, plots_imgs_folder
 
 def plot_image_grid(image_tensor, nrows=4, ncols = 4, figsize=(4, 4), title = 'x-direction', output_folder =None, file_name =None):
