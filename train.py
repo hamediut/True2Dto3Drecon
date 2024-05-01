@@ -15,7 +15,7 @@ import random
 import argparse
 import matplotlib.pyplot as plt
 import tifffile
-
+import time
 
 import torch
 from torch import nn
@@ -24,7 +24,7 @@ import torch.optim as optim
 
 from skimage.metrics import mean_squared_error
 
-from src.training_utils import Dataset_3BSEs, calc_gradient_penalty, evaluate_G, Logger
+from src.training_utils import Dataset_3BSEs, calc_gradient_penalty, evaluate_G, Logger, format_duration
 from src.util_functions import _get_tensor_value, create_directories, plot_image_grid
 from src.SMD_cal import calculate_two_point_list, list_to_df_two_point, calculate_two_point_3D
 from src.metric_fid import compute_stats, calculate_frechet_distance
@@ -88,7 +88,7 @@ def parse_args():
   parser.add_argument('--batch_size_fid', type = int, default= 8, help = 'batch size for Inception model to calculate FID')
   parser.add_argument('--dims', type= int, default = 2048, help= 'dimensionality of features in inception model')
   parser.add_argument('--num_workers', type= int, default = 0, help= 'number of cpu for fid calculations')
-  parser.add_argument('--fid_thresh', type = int, default= 20, help= 'the threshold value to save model')
+  parser.add_argument('--fid_thresh', type = int, default= 100, help= 'the threshold value to save model')
   
 #   parser.add_argument('--resume_iter', type = int, help= 'the iteration the model you want to resume for e.g., WGAN_Gen_iter_')
 
@@ -97,7 +97,7 @@ def parse_args():
 
 def train():
    args = parse_args()
-
+   start_time  = time.time()
    training_data_path = [arg for arg in [args.dir_img_1, args.dir_img_2, args.dir_img_3] if arg is not None]
    num_Ds = len(training_data_path)
 
@@ -159,7 +159,7 @@ def train():
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
-   samples_fid = ds1.sample(batch_size= 2048, return_s2= None)
+   samples_fid = ds1.sample(batch_size= 1024, return_s2= None)
    
    # print(f'type of samples: {type(samples)}')
    print(f'size of samples:{len(samples)}')
@@ -335,22 +335,25 @@ def train():
              real_data_temp = real_data.detach().requires_grad_(True)
              out_real = netD(real_data_temp).view(-1).mean()
             #  print(f'out_real: {out_real}')
-             real_loss = torch.mean(torch.nn.functional.softplus(-out_real))
+             real_loss = torch.nn.functional.softplus(-out_real)
             #  print(f'real_loss: {real_loss}')
              fake_loss = torch.mean(torch.nn.functional.softplus(out_fake))
             #  print(f'fake_loss: {fake_loss}')
 
              ## R1 regularization
+            #  r1_penalty = 0
+            #  if i % args.r1_interval ==0:
+
              real_grads = torch.autograd.grad(
-                outputs = [out_real.sum()],
-                inputs = [real_data_temp],
-                create_graph= True,
-                only_inputs= True 
-             )[0]
+               outputs = [out_real.sum()],
+               inputs = [real_data_temp],
+               create_graph= True,
+               only_inputs= True 
+            )[0]
             #  print(f'real_grads shape:{real_grads.shape}')
              r1_penalty = real_grads.square().sum([1,2,3])
              r1_penalty = (args.gamma/2) * r1_penalty
-            #  print(f'r1_penalty: {r1_penalty}')
+         #  print(f'r1_penalty: {r1_penalty}')
 
              disc_cost = (real_loss + r1_penalty).mean() + fake_loss
              sum_D_loss_real += _get_tensor_value((real_loss + r1_penalty).mean())
@@ -392,11 +395,11 @@ def train():
       losses_dict['gen'].append(float(_get_tensor_value(errG)))
       losses_dict['disc_loss_real'].append(sum_D_loss_real/len_dataset) # average loss of Ds
       losses_dict['disc_loss_gen'].append(sum_D_loss_gen/len_dataset)
-
+      tick_end_time  = time.time()
       if i % args.print_every ==0:
-         print(f"Iteration= {i} \t Gen_loss={losses_dict['gen'][-1]: .3f} \t D_loss_real={losses_dict['disc_loss_real'][-1]:.3f} \t D_loss_gen={losses_dict['disc_loss_gen'][-1]:.3f}")
+         print(f"Iteration= {i} \t time= {format_duration(tick_end_time - start_time)} \t Gen_loss={losses_dict['gen'][-1]: .3f} \t D_loss_real={losses_dict['disc_loss_real'][-1]:.3f} \t D_loss_gen={losses_dict['disc_loss_gen'][-1]:.3f}")
 
-      if i % args.save_every == 0:
+      if i % args.save_every == 0 and i > 3000:
          print(f"Evaluating the model...")
          random_stack = np.random.randint(0 , args.num_img_eval)
 
@@ -435,54 +438,37 @@ def train():
          plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.4e}')
          plt.savefig(os.path.join(plots_imgs_folder, f's2_iter_{i}.png'), dpi = 300)
 
-         # metric FID
-         m_fake_x, s_fake_x = compute_stats(np.concatenate(fake_np_binary, axis =0), args.batch_size_fid, device, args.dims,
-                               args.num_workers)
-         fake_y_test = np.concatenate(np.transpose(fake_np_binary, axes = (0, 2, 1, 3)), axis = 0)
-         m_fake_y, s_fake_y = compute_stats(np.concatenate(fake_y_test, axis =0), args.batch_size_fid, device, args.dims,
-                               args.num_workers)
-         fake_z_test = np.concatenate(np.transpose(fake_np_binary, axes = (0, 3, 1, 2)), axis = 0)
-         m_fake_z, s_fake_z = compute_stats(np.concatenate(fake_z_test, axis =0), args.batch_size_fid, device, args.dims,
-                               args.num_workers)
-         
-         fid_x = calculate_frechet_distance(m_real_x, s_real_x, m_fake_x, s_fake_x)
-         if len(batches)>=2:
-            fid_y = calculate_frechet_distance(m_real_y, s_real_y, m_fake_y, s_fake_y)
-            fid_avg = (fid_x + fid_y)/2
-         if len(batches) ==3:
-            fid_z = calculate_frechet_distance(m_real_z, s_real_z, m_fake_z, s_fake_z)
-            fid_avg = (fid_x + fid_y + fid_z)/3
-
-         print(f"Frechet Inception Distance(FID) = {fid_avg}")
          
          ## saving models---------------------------------
          
-#          if (mse_3d_avg < args.mse_thresh) or i % 10000 == 0:
+         if (mse_3d_avg < args.mse_thresh)  or i % 10000 == 0:
+            # metric FID
+            m_fake_x, s_fake_x = compute_stats(np.concatenate(fake_np_binary[:4], axis =0), args.batch_size_fid, device, args.dims,
+                                 args.num_workers)
+            fake_y_test = np.concatenate(np.transpose(fake_np_binary[:4], axes = (0, 2, 1, 3)), axis = 0)
+            m_fake_y, s_fake_y = compute_stats(np.concatenate(fake_y_test, axis =0), args.batch_size_fid, device, args.dims,
+                                 args.num_workers)
+            fake_z_test = np.concatenate(np.transpose(fake_np_binary[:4], axes = (0, 3, 1, 2)), axis = 0)
+            m_fake_z, s_fake_z = compute_stats(fake_z_test, args.batch_size_fid, device, args.dims,
+                                 args.num_workers)
             
-#             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
-#             # for D_index in range(len_dataset):
-#             #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
-# #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
-#             if mse_3d_avg < min_mse:
-#                 #removing the previous best model in the folder cause they're not the best anymore
-#                 for filename in glob(os.path.join(best_folder, 'WGAN*')):
-#                     os.remove(filename) 
-#                 # save the checkpoint as the best model
-#                 torch.save(netG.state_dict(), os.path.join(best_folder, f'WGAN_Gen_iter_{i}.pt'))
-#                 for D_index in range(len_dataset):
-#                    torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+            fid_x = calculate_frechet_distance(m_real_x, s_real_x, m_fake_x, s_fake_x)
+            if len(batches)>=2:
+               fid_y = calculate_frechet_distance(m_real_y, s_real_y, m_fake_y, s_fake_y)
+               fid_avg = (fid_x + fid_y)/2
+            if len(batches) ==3:
+               fid_z = calculate_frechet_distance(m_real_z, s_real_z, m_fake_z, s_fake_z)
+               fid_avg = (fid_x + fid_y + fid_z)/3
 
-#                 # updating the minimum mse 
-#                 min_mse = mse_3d_avg
+            print(f"Frechet Inception Distance(FID) = {fid_avg}")
 
-         ###--------------based on FID
-         if (fid_avg < args.fid_thresh) or i % 10000 == 0:
+            
             
             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
             # for D_index in range(len_dataset):
             #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
-            if fid_avg < min_fid:
+            if mse_3d_avg < min_mse:
                 #removing the previous best model in the folder cause they're not the best anymore
                 for filename in glob(os.path.join(best_folder, 'WGAN*')):
                     os.remove(filename) 
@@ -492,8 +478,26 @@ def train():
                    torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 
                 # updating the minimum mse 
-                min_fid = fid_avg
+                min_mse = mse_3d_avg
+
+#          ###--------------based on FID
+#          if (fid_avg < args.fid_thresh) or i % 10000 == 0:
+            
+#             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
+#             # for D_index in range(len_dataset):
+#             #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+# #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
+#             if fid_avg < min_fid:
+#                 #removing the previous best model in the folder cause they're not the best anymore
+#                 for filename in glob(os.path.join(best_folder, 'WGAN*')):
+#                     os.remove(filename) 
+#                 # save the checkpoint as the best model
+#                 torch.save(netG.state_dict(), os.path.join(best_folder, f'WGAN_Gen_iter_{i}.pt'))
+#                 for D_index in range(len_dataset):
+#                    torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
+
+#                 # updating the minimum mse 
+#                 min_fid = fid_avg
 
 if __name__== "__main__":
     train() 
-

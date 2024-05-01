@@ -269,3 +269,14 @@ class Logger(object):
         if self.file is not None:
             self.file.close()
             self.file = None
+
+##---------------------------
+def format_duration(seconds:int)-> str:
+    # Calculate the days, hours, minutes, and seconds
+    days, remainder = divmod(seconds, 86400)  # 86400 seconds in a day
+    hours, remainder = divmod(remainder, 3600)  # 3600 seconds in an hour
+    minutes, seconds = divmod(remainder, 60)  # 60 seconds in a minute
+
+    # Build the formatted string
+    formatted_time = f"{days:.0f}d {hours:.0f}h {minutes:.0f}m {seconds:.0f}s"
+    return formatted_time
