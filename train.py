@@ -307,12 +307,12 @@ def train():
           fake_data_perm = fake_data.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.D_batch_size,
                                                                               args.img_channels, args.train_img_size,
                                                                               args.train_img_size)
-          out_fake = netD(fake_data_perm).mean()
-         #  print(f'out_fake:{out_fake}')
+          out_fake = netD(fake_data_perm) #ED( G(z)_i ) -> (512, 1,1,1)
+         #  print(f'out_fake shape:{out_fake.shape}')
           ##WGAN-GP
           if args.loss == 'wgan-gp':
          
-             out_real = netD(real_data).view(-1).mean()
+             out_real = netD(real_data).view(-1).mean() 
 
             #  fake_data_perm = fake_data.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.D_batch_size,
             #                                                                   args.img_channels, args.train_img_size,
@@ -333,12 +333,12 @@ def train():
          
           elif args.loss == 'bce-r1':
              real_data_temp = real_data.detach().requires_grad_(True)
-             out_real = netD(real_data_temp).view(-1).mean()
-            #  print(f'out_real: {out_real}')
-             real_loss = torch.nn.functional.softplus(-out_real)
-            #  print(f'real_loss: {real_loss}')
-             fake_loss = torch.mean(torch.nn.functional.softplus(out_fake))
-            #  print(f'fake_loss: {fake_loss}')
+             out_real = netD(real_data_temp).view(-1) #E(D(x)) # shouldn't be without mean?
+            #  print(f'out_real shape: {out_real.shape}') #shape (2)
+             real_loss = torch.nn.functional.softplus(-out_real) # -E[(log(D(x)))]
+            #  print(f'real_loss: {real_loss}') #shape (2)
+             fake_loss = torch.mean(torch.nn.functional.softplus(out_fake)) #-E[log(1 - D(G(z)))]
+            #  print(f'fake_loss: {fake_loss}') # shape (1) scalar
 
              ## R1 regularization
             #  r1_penalty = 0
@@ -353,11 +353,11 @@ def train():
             #  print(f'real_grads shape:{real_grads.shape}')
              r1_penalty = real_grads.square().sum([1,2,3])
              r1_penalty = (args.gamma/2) * r1_penalty
-         #  print(f'r1_penalty: {r1_penalty}')
+            #  print(f'r1_penalty: {r1_penalty}') # shape (2)
 
              disc_cost = (real_loss + r1_penalty).mean() + fake_loss
              sum_D_loss_real += _get_tensor_value((real_loss + r1_penalty).mean())
-             sum_D_loss_gen  += _get_tensor_value(out_fake)
+             sum_D_loss_gen  += _get_tensor_value(fake_loss)
 
              disc_cost.backward()
              optimizer.step()
@@ -382,12 +382,12 @@ def train():
          fake_data_perm = fake.permute(0, d1, 1, d2, d3).reshape(args.train_img_size * args.batch_size, args.img_channels, 
                                                                   args.train_img_size, args.train_img_size)
          #fake_data_perm: (32, 64, 2, 64, 64) --> reshape to : (32 *64 = 2048, 2, 64, 64)
-         output = netD(fake_data_perm)
-         # print(f'output shape: {output.shape}')
+         output = netD(fake_data_perm)# shape (512, 1, 1, 1)
+         # print(f'output shape: {output.shape}') 
          if args.loss == 'wgan-gp':
             errG -= output.mean()
          elif args.loss == 'bce-r1':
-            gen_loss = torch.mean(torch.nn.functional.softplus(-output))
+            gen_loss = torch.mean(torch.nn.functional.softplus(-output)) # -E[log(D(G(z)_i))] shape (1)-> scalar
             errG += gen_loss
       errG.backward()
       optG.step()
@@ -396,10 +396,14 @@ def train():
       losses_dict['disc_loss_real'].append(sum_D_loss_real/len_dataset) # average loss of Ds
       losses_dict['disc_loss_gen'].append(sum_D_loss_gen/len_dataset)
       tick_end_time  = time.time()
+
+      # print(f"loss gen: {losses_dict['gen']}")
+      # print(f"loss D real: {losses_dict['disc_loss_real']}")
+      # print(f"loss D gen: {losses_dict['disc_loss_gen']}")
       if i % args.print_every ==0:
          print(f"Iteration= {i} \t time= {format_duration(tick_end_time - start_time)} \t Gen_loss={losses_dict['gen'][-1]: .3f} \t D_loss_real={losses_dict['disc_loss_real'][-1]:.3f} \t D_loss_gen={losses_dict['disc_loss_gen'][-1]:.3f}")
 
-      if i % args.save_every == 0 and i > 3000:
+      if i % args.save_every == 0 and i >= 1000:
          print(f"Evaluating the model...")
          random_stack = np.random.randint(0 , args.num_img_eval)
 
@@ -410,6 +414,26 @@ def train():
          mse_dict[f'iter_{i}'] = mse_3d_avg
          joblib.dump(mse_dict, os.path.join(current_run_folder, 'mse_dict.pkl'))
          print(f" Mean Squared Error (MSE) = {mse_3d_avg}")
+         ##metric FID
+         m_fake_x, s_fake_x = compute_stats(np.concatenate(fake_np_binary[:4], axis =0), args.batch_size_fid, device, args.dims,
+                              args.num_workers)
+         fake_y_test = np.concatenate(np.transpose(fake_np_binary[:4], axes = (0, 2, 1, 3)), axis = 0)
+         m_fake_y, s_fake_y = compute_stats(fake_y_test, args.batch_size_fid, device, args.dims,
+                              args.num_workers)
+         fake_z_test = np.concatenate(np.transpose(fake_np_binary[:4], axes = (0, 3, 1, 2)), axis = 0)
+         m_fake_z, s_fake_z = compute_stats(fake_z_test, args.batch_size_fid, device, args.dims,
+                              args.num_workers)
+         
+         fid_x = calculate_frechet_distance(m_real_x, s_real_x, m_fake_x, s_fake_x)
+         if len(batches)>=2:
+            fid_y = calculate_frechet_distance(m_real_y, s_real_y, m_fake_y, s_fake_y)
+            fid_avg = (fid_x + fid_y)/2
+         if len(batches) ==3:
+            fid_z = calculate_frechet_distance(m_real_z, s_real_z, m_fake_z, s_fake_z)
+            fid_avg = (fid_x + fid_y + fid_z)/3
+
+         print(f"Frechet Inception Distance(FID) = {fid_avg}")
+         fid_dict[f'iter_{i}'] = fid_avg
          ## saving fakes images and s2 plots----------------------------
          plot_image_grid(fake_np_binary[random_stack, :16, :, :], figsize=(3, 3), title= 'Fake-x',
                          output_folder= plots_imgs_folder, file_name= f'fake_x_iter_{i}' )
@@ -435,33 +459,13 @@ def train():
          plt.xlabel('r(px)', fontsize = 'x-large')
          plt.ylabel('$S_2$', fontsize = 'x-large')
          plt.legend(ncol =1, fontsize ='large')
-         plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.4e}')
+         plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.2e}, FID={fid_avg:.2f}')
          plt.savefig(os.path.join(plots_imgs_folder, f's2_iter_{i}.png'), dpi = 300)
 
          
          ## saving models---------------------------------
          
-         if (mse_3d_avg < args.mse_thresh)  or i % 10000 == 0:
-            # metric FID
-            m_fake_x, s_fake_x = compute_stats(np.concatenate(fake_np_binary[:4], axis =0), args.batch_size_fid, device, args.dims,
-                                 args.num_workers)
-            fake_y_test = np.concatenate(np.transpose(fake_np_binary[:4], axes = (0, 2, 1, 3)), axis = 0)
-            m_fake_y, s_fake_y = compute_stats(np.concatenate(fake_y_test, axis =0), args.batch_size_fid, device, args.dims,
-                                 args.num_workers)
-            fake_z_test = np.concatenate(np.transpose(fake_np_binary[:4], axes = (0, 3, 1, 2)), axis = 0)
-            m_fake_z, s_fake_z = compute_stats(fake_z_test, args.batch_size_fid, device, args.dims,
-                                 args.num_workers)
-            
-            fid_x = calculate_frechet_distance(m_real_x, s_real_x, m_fake_x, s_fake_x)
-            if len(batches)>=2:
-               fid_y = calculate_frechet_distance(m_real_y, s_real_y, m_fake_y, s_fake_y)
-               fid_avg = (fid_x + fid_y)/2
-            if len(batches) ==3:
-               fid_z = calculate_frechet_distance(m_real_z, s_real_z, m_fake_z, s_fake_z)
-               fid_avg = (fid_x + fid_y + fid_z)/3
-
-            print(f"Frechet Inception Distance(FID) = {fid_avg}")
-
+         if (mse_3d_avg < args.mse_thresh)  or i % 5000 == 0:
             
             
             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
