@@ -164,20 +164,22 @@ def evaluate_G(netG, num_img, img_size = 256, z_size = 4, z_channels = 16, direc
             fake_np_binary = np.where(fake_np> thresh, 1, 0).astype(np.uint8)
             fake_np_stack_binary[i] = fake_np_binary
 
-        # s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg = calculate_two_point_3D(fake_np_stack_binary, directional = True) # average s2 in 3D
-        if directional:
-            s2_x, s2_y, s2_z, s2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= directional)
+    return fake_np_stack_binary
 
-            return fake_np_stack_binary, s2_x, s2_y, s2_z, s2_avg
+    #     # s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg = calculate_two_point_3D(fake_np_stack_binary, directional = True) # average s2 in 3D
+    #     if directional:
+    #         s2_x, s2_y, s2_z, s2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= directional)
 
-        else:
-            s2_avg, f2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= directional) 
-            return fake_np_stack_binary, s2_avg, f2_avg
+    #         return fake_np_stack_binary, s2_x, s2_y, s2_z, s2_avg
+
+    #     else:
+    #         s2_avg, f2_avg = calculate_two_point_3D(fake_np_stack_binary, directional= directional) 
+    #         return fake_np_stack_binary, s2_avg, f2_avg
 
     
-    # netG.train()
-    # # return fake_np_stack_binary, s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg
-    # return fake_np_stack_binary, s2_avg, f2_avg
+    # # netG.train()
+    # # # return fake_np_stack_binary, s2_fake_X, s2_fake_Y, s2_fake_Z, s2_fake_3D_avg
+    # # return fake_np_stack_binary, s2_avg, f2_avg
 
 def calc_gradient_penalty(netD, real_data, fake_data, batch_size, img_size, device, Lambda, img_channels):
     """

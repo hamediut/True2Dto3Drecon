@@ -88,7 +88,7 @@ def parse_args():
   parser.add_argument('--batch_size_fid', type = int, default= 8, help = 'batch size for Inception model to calculate FID')
   parser.add_argument('--dims', type= int, default = 2048, help= 'dimensionality of features in inception model')
   parser.add_argument('--num_workers', type= int, default = 0, help= 'number of cpu for fid calculations')
-  parser.add_argument('--fid_thresh', type = int, default= 100, help= 'the threshold value to save model')
+  parser.add_argument('--fid_thresh', type = int, default= 10, help= 'the threshold value to save model')
   
 #   parser.add_argument('--resume_iter', type = int, help= 'the iteration the model you want to resume for e.g., WGAN_Gen_iter_')
 
@@ -159,6 +159,7 @@ def train():
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
+   print('samples are done!')
    samples_fid = ds1.sample(batch_size= 1024, return_s2= None)
    
    # print(f'type of samples: {type(samples)}')
@@ -407,13 +408,11 @@ def train():
          print(f"Evaluating the model...")
          random_stack = np.random.randint(0 , args.num_img_eval)
 
-         fake_np_binary, s2_fake_x, s2_fake_y, s2_fake_z, s2_fake_3D_avg = evaluate_G(netG= netG, num_img=args.num_img_eval, directional= True)
+         # fake_np_binary, s2_fake_x, s2_fake_y, s2_fake_z, s2_fake_3D_avg = evaluate_G(netG= netG, num_img=args.num_img_eval, directional= True)
+         fake_np_binary = evaluate_G(netG= netG, num_img=args.num_img_eval, directional= True)
+
          # fake_np_binary, s2_fake_3D_avg, _ = evaluate_G(netG= netG, num_img=args.num_img_eval)
          
-         mse_3d_avg = mean_squared_error(s2_real_avg, s2_fake_3D_avg['s2']['mean'])
-         mse_dict[f'iter_{i}'] = mse_3d_avg
-         joblib.dump(mse_dict, os.path.join(current_run_folder, 'mse_dict.pkl'))
-         print(f" Mean Squared Error (MSE) = {mse_3d_avg}")
          ##metric FID
          m_fake_x, s_fake_x = compute_stats(np.concatenate(fake_np_binary[:4], axis =0), args.batch_size_fid, device, args.dims,
                               args.num_workers)
@@ -434,6 +433,7 @@ def train():
 
          print(f"Frechet Inception Distance(FID) = {fid_avg}")
          fid_dict[f'iter_{i}'] = fid_avg
+         joblib.dump(fid_dict, os.path.join(current_run_folder, 'fid_dict.pkl'))
          ## saving fakes images and s2 plots----------------------------
          plot_image_grid(fake_np_binary[random_stack, :16, :, :], figsize=(3, 3), title= 'Fake-x',
                          output_folder= plots_imgs_folder, file_name= f'fake_x_iter_{i}' )
@@ -442,37 +442,44 @@ def train():
          
          plot_image_grid(np.transpose(fake_np_binary[random_stack, :, :, :16], (2, 0, 1)), title= 'Fake-Z',
                          output_folder= plots_imgs_folder, file_name= f'fake_z_iter_{i}')
-         plt.figure()
-         plt.plot(s2_df_x.index, s2_df_x['s2']['mean'], color ='dodgerblue', label='Real x')
-         if len(batches) == 2:
-            plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
-            # plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
-         elif len(batches) ==3:
-            plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
-            plt.plot(s2_df_z.index, s2_df_z['s2']['mean'], color ='forestgreen', label='Real z')
-         plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
-
-         plt.plot(s2_fake_x.index, s2_fake_x['s2']['mean'], color ='dodgerblue', linestyle ='--')
-         plt.plot(s2_fake_y.index, s2_fake_y['s2']['mean'], color ='crimson', linestyle ='--')
-         plt.plot(s2_fake_z.index, s2_fake_z['s2']['mean'], color ='forestgreen', linestyle ='--')
-         plt.plot(s2_fake_3D_avg.index, s2_fake_3D_avg['s2']['mean'], color ='k', linestyle ='--')
-         plt.xlabel('r(px)', fontsize = 'x-large')
-         plt.ylabel('$S_2$', fontsize = 'x-large')
-         plt.legend(ncol =1, fontsize ='large')
-         plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.2e}, FID={fid_avg:.2f}')
-         plt.savefig(os.path.join(plots_imgs_folder, f's2_iter_{i}.png'), dpi = 300)
-
          
+            
          ## saving models---------------------------------
          
-         if (mse_3d_avg < args.mse_thresh)  or i % 5000 == 0:
+         if (fid_avg < args.fid_thresh)  or i % 5000 == 0:
+
+            s2_fake_x, s2_fake_y, s2_fake_z, s2_fake_3D_avg = calculate_two_point_3D(fake_np_binary, directional=True)
+
+            mse_3d_avg = mean_squared_error(s2_real_avg, s2_fake_3D_avg['s2']['mean'])
+            mse_dict[f'iter_{i}'] = mse_3d_avg
+            joblib.dump(mse_dict, os.path.join(current_run_folder, 'mse_dict.pkl'))
+            print(f" Mean Squared Error (MSE) = {mse_3d_avg}")
+            plt.figure()
+            plt.plot(s2_df_x.index, s2_df_x['s2']['mean'], color ='dodgerblue', label='Real x')
+            if len(batches) == 2:
+               plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
+               # plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
+            elif len(batches) ==3:
+               plt.plot(s2_df_y.index, s2_df_y['s2']['mean'], color ='crimson', label='Real y')
+               plt.plot(s2_df_z.index, s2_df_z['s2']['mean'], color ='forestgreen', label='Real z')
+            plt.plot(s2_real_avg, color = 'k', label = 'Real avg')
+
+            plt.plot(s2_fake_x.index, s2_fake_x['s2']['mean'], color ='dodgerblue', linestyle ='--')
+            plt.plot(s2_fake_y.index, s2_fake_y['s2']['mean'], color ='crimson', linestyle ='--')
+            plt.plot(s2_fake_z.index, s2_fake_z['s2']['mean'], color ='forestgreen', linestyle ='--')
+            plt.plot(s2_fake_3D_avg.index, s2_fake_3D_avg['s2']['mean'], color ='k', linestyle ='--')
+            plt.xlabel('r(px)', fontsize = 'x-large')
+            plt.ylabel('$S_2$', fontsize = 'x-large')
+            plt.legend(ncol =1, fontsize ='large')
+            plt.title(f'Iteration: {i}, MSE ={mse_3d_avg:.2e}, FID={fid_avg:.2f}')
+            plt.savefig(os.path.join(plots_imgs_folder, f's2_iter_{i}.png'), dpi = 300)
             
             
             torch.save(netG.state_dict(), os.path.join(checkpoints_folder, f'WGAN_Gen_iter_{i}.pt'))
             # for D_index in range(len_dataset):
             #        torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 #             torch.save(netD.state_dict(), os.path.join(output_checkpoints, f'WGAN_Disc_iter_{i}.pt'))
-            if mse_3d_avg < min_mse:
+            if fid_avg < min_fid:
                 #removing the previous best model in the folder cause they're not the best anymore
                 for filename in glob(os.path.join(best_folder, 'WGAN*')):
                     os.remove(filename) 
@@ -482,7 +489,7 @@ def train():
                    torch.save(netDs[D_index].state_dict(), os.path.join(best_folder, f'WGAN_Disc{D_index}_iter_{i}.pt'))
 
                 # updating the minimum mse 
-                min_mse = mse_3d_avg
+                min_fid = fid_avg
 
 #          ###--------------based on FID
 #          if (fid_avg < args.fid_thresh) or i % 10000 == 0:
