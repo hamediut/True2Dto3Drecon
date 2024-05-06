@@ -54,7 +54,7 @@ def parse_args():
                         help='Full path to 2D image taken on plane 3. it should be .tif file')
   parser.add_argument('--RES', required= True, type = int, nargs = '+',
                       help = 'Representative image size. provide multiple values with space if the resolution of images are different. if a size is different than training image size, it will be resized.' )
-  parser.add_argument('--train_img_size', type= int, default= None,
+  parser.add_argument('--train_img_size', type= int, default= 256,
                       help = 'training image size, it can be smaller than RES. if None, no resizing and RES will be used for training image size')
   parser.add_argument('--img_channels', type= int, default= 1,
                       help = 'number of channels. Default is 1 (binary image)')

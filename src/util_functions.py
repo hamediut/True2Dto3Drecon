@@ -51,8 +51,8 @@ def create_directories(parent_folder, training_params):
     f"BatchSize_{training_params['batch_size']}_"
     f"D_batch_size_{training_params['D_batch_size']}_"
     f"Lrg_{training_params['lrg']}_"
-    f"LrD_{training_params['lrd']}"
-    # f"Lambda_{training_params['Lambda']}"
+    f"LrD_{training_params['lrd']}_"
+    f"Lambda_{training_params['Lambda']}"
     )
   
 
