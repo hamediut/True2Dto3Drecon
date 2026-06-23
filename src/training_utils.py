@@ -66,8 +66,8 @@ class Dataset_3BSEs(Dataset):
                 resized_patch = np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
                 resized_pathces.append(resized_patch)
             patches = resized_pathces
-        # Convert patches to PyTorch tensors
-        patches = [torch.from_numpy(patch).unsqueeze(dim=0).type(torch.cuda.FloatTensor) for patch in patches]
+        # Return CPU tensors; the training loop moves them to the correct device
+        patches = [torch.from_numpy(patch).unsqueeze(dim=0).float() for patch in patches]
 
         # If the third image is loaded, process it similarly
         if self.image3 is not None:
@@ -80,7 +80,7 @@ class Dataset_3BSEs(Dataset):
                 patch3_resized =  patch3_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
                 thresh = threshold_otsu(np.array(patch3_resized))
                 patch3 = np.where(np.array(patch3_resized) > thresh, 1, 0).astype(np.uint8)
-            patch3 = torch.from_numpy(patch3).unsqueeze(dim=0).type(torch.cuda.FloatTensor)
+            patch3 = torch.from_numpy(patch3).unsqueeze(dim=0).float()
             patches.append(patch3)
 
         return tuple(patches)
@@ -220,7 +220,12 @@ class Logger(object):
     def flush(self) -> None:
         """Flush written text to both stdout and a file, if open."""
         if self.file is not None:
-            self.file.flush()
+            try:
+                self.file.flush()
+            except OSError as e:
+                # Don't crash training if the log file can't be flushed
+                # (e.g. network share hiccup, or DDP teardown corrupting handles).
+                self.stdout.write(f"[Logger] flush failed: {e}\n")
 
         self.stdout.flush()
 
