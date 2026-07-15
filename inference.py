@@ -39,7 +39,7 @@ def parse_args():
                       help= 'Number of available gpus. if ngpu > 1, model will be parallelized on ngpus')
   parser.add_argument('--output_dir', type = str, help= 'where to save generated images')
   parser.add_argument('--num_imgs', type =int, default= 50, help= 'Number of images to generate')
-  parser.add_argument('--img_size', type = int, default = 256, help= 'Size of the generated 3D images: (img_size, img_size, img_size). if different than 256, you should change the networks architecture ')
+  parser.add_argument('--img_size', type = int, default = 128, help= 'Size of the generated 3D images: (img_size, img_size, img_size). if different than 128, you should change the networks architecture ')
   parser.add_argument('--z_size', type = int, default= 4, help= 'Size of noise vector. with z_size = 4, output image size = 256. with z_size = 6, output image size = 512.')
   parser.add_argument('--img_channels', type= int, default= 1,
                       help = 'number of channels. Default is 1 (binary image)')
@@ -64,14 +64,15 @@ def gen_img():
 
    print('-----------------------------')
    # Layers in G and D
-   lays =10
+   lays = 9
    # kernals for each layer
    gk = [4]*lays
    # strides
    gs= [2]*lays
-   # with conv layer and sticking to rules to avoid checkerboard
-   gf = [args.z_channels, 2048, 1024, 512, 256, 128, 64, 64,  args.img_channels]
-   gp = [2] * 8 # for res = 256, sticking to rules for checkerboard
+   # with conv layer and sticking to rules to avoid checkerboard.
+   # This config produces 128x128x128 output and must match the training architecture.
+   gf = [args.z_channels, 2048, 1024, 512, 256, 128, 64,  args.img_channels]
+   gp = [2] * 7 # for res = 128, sticking to rules for checkerboard
 
    netG = Generator(num_layers= lays, gf=gf, gk=gk, gs=gs, gp=gp).to(device)
    if ('cuda' in str(device)) and (args.ngpu >1):

@@ -1,0 +1,20 @@
+{
+  "raw_file": "C:\\Users\\Admin\\Desktop\\anisotropy_battery\\data\\raw\\battery_separator.tif",
+  "original_shape_zyx_assumed": [
+    500,
+    650,
+    1300
+  ],
+  "original_dtype": "uint8",
+  "original_min": 0.0,
+  "original_max": 255.0,
+  "threshold_used": 127.5,
+  "binary_values": [
+    0,
+    1
+  ],
+  "phase_fraction_value_1": 0.40414653964497044,
+  "transition_rate_axis_0_z": 0.019486127284154105,
+  "transition_rate_axis_1_y": 0.017826623207301173,
+  "transition_rate_axis_2_x": 0.03451532421389234
+}

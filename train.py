@@ -52,6 +52,9 @@ def parse_args():
                         help='Full path to the 2D image taken from plane 2. it should be .tif file')
   parser.add_argument('--dir_img_3', type=str,
                         help='Full path to 2D image taken on plane 3. it should be .tif file')
+  parser.add_argument('--is_volume', action='store_true',
+                        help='If set, --dir_img_1 is treated as a single 3D volume (.tif stack). '
+                             'Random 2D slices are sampled from all 3 axes for anisotropic training.')
   parser.add_argument('--RES', required= True, type = int,
                       help = 'Representative image size' )
   parser.add_argument('--train_img_size', type= int, default= None,
@@ -90,14 +93,20 @@ def train():
    args = parse_args()
    
 
-   training_data_path = [arg for arg in [args.dir_img_1, args.dir_img_2, args.dir_img_3] if arg is not None]
-   print(f'training data path:{training_data_path}')
-
-   if len(training_data_path)==1:
-      training_data_path *= 3
-      isotropic = True
-   else:
+   if args.is_volume:
+      # single 3D volume -> train anisotropically on 2D slices from all 3 axes (3 discriminators)
+      training_data_path = [args.dir_img_1] * 3
       isotropic = False
+      print(f'training data path (3D volume): {args.dir_img_1}')
+   else:
+      training_data_path = [arg for arg in [args.dir_img_1, args.dir_img_2, args.dir_img_3] if arg is not None]
+      print(f'training data path:{training_data_path}')
+
+      if len(training_data_path)==1:
+         training_data_path *= 3
+         isotropic = True
+      else:
+         isotropic = False
 
    training_params = {
       'num_Ds': len(training_data_path), 'batch_size':args.batch_size,'D_batch_size':args.D_batch_size,
@@ -127,7 +136,8 @@ def train():
    resized_to = None if args.train_img_size == args.RES else args.train_img_size
    print(f'resized_to is:{resized_to}')
    ds1 = Dataset_3BSEs(args.dir_img_1, args.dir_img_2, args.dir_img_3,
-                        patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs)
+                        patch_size = args.RES, resized_to = resized_to,  num_samples = args.num_train_imgs,
+                        is_volume = args.is_volume)
    dataloader = DataLoader(ds1, batch_size=args.batch_size, shuffle=True)
 
    samples = ds1.sample(batch_size= 100, return_s2= None)
@@ -184,14 +194,15 @@ def train():
    # Then, we compute mse between this average and average value of fakes images and use it as a criterion for saving best models.
    # print('Constructing networks...')
    # Layers in G and D
-   lays =10
+   lays = 9
    # kernals for each layer
    dk, gk = [4]*lays, [4]*lays
    # strides
    ds, gs= [2]*lays, [2]*lays
-   # with conv layer and sticking to rules to avoid checkerboard
-   df, gf = [args.img_channels, 64, 128, 256, 512, 1024, 2048, 1], [args.z_channels, 2048, 1024, 512, 256, 128, 64, 64,  args.img_channels]
-   dp, gp = [1, 1, 1, 1, 1, 1, 1,], [2] * 8 # for res = 256, sticking to rules for checkerboard
+   # with conv layer and sticking to rules to avoid checkerboard.
+   # This config produces 128x128x128 output (one fewer up/downsampling layer than the 256 config).
+   df, gf = [args.img_channels, 64, 128, 256, 512, 1024, 1], [args.z_channels, 2048, 1024, 512, 256, 128, 64,  args.img_channels]
+   dp, gp = [1, 1, 1, 1, 1, 1], [2] * 7 # for res = 128, sticking to rules for checkerboard
 
    print('-----------------------------')
    print('Checking cuda availability...')
@@ -323,7 +334,9 @@ def train():
          print(f"Evaluating the model...")
          random_stack = np.random.randint(0 , args.num_img_eval)
 
-         fake_np_binary, s2_fake_x, s2_fake_y, s2_fake_z, s2_fake_3D_avg = evaluate_G(netG= netG, num_img=args.num_img_eval, directional= True)
+         fake_np_binary, s2_fake_x, s2_fake_y, s2_fake_z, s2_fake_3D_avg = evaluate_G(netG= netG, num_img=args.num_img_eval,
+                                                                                      img_size=args.train_img_size, z_size=args.z_size,
+                                                                                      z_channels=args.z_channels, directional= True)
          # fake_np_binary, s2_fake_3D_avg, _ = evaluate_G(netG= netG, num_img=args.num_img_eval)
          
          mse_3d_avg = mean_squared_error(s2_real_avg, s2_fake_3D_avg['s2']['mean'])

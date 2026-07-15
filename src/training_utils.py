@@ -25,23 +25,60 @@ class Dataset_3BSEs(Dataset):
                   image3_path: Optional[str]= None,
                   patch_size: int =512,
                   resized_to: Optional[int] = None,
-                  num_samples: int = 15000):
+                  num_samples: int = 15000,
+                  is_volume: bool = False):
         self.image1_path = image1_path
         self.image2_path = image2_path
         self.image3_path = image3_path
         self.patch_size = patch_size
         self.num_samples = num_samples
         self.resized_to = resized_to
-        #reading the original large images
-        # if image is not zero and 1, we put the maximum value =1--> important for s2 calculation
-        self.image1 = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
-        self.image2 = np.where(tifffile.imread(self.image2_path) >= 1, 1, 0).astype(np.uint8)
-        self.image3 = np.where(tifffile.imread(self.image3_path) >= 1, 1, 0).astype(np.uint8) if image3_path is not None else None
-        
+        self.is_volume = is_volume
+
+        if is_volume:
+            # image1_path points to a single 3D volume. We sample random 2D slices
+            # from all three axes so the three discriminators each see one orientation.
+            self.volume = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
+            assert self.volume.ndim == 3, f'is_volume=True but the image has shape {self.volume.shape} (expected 3D)'
+            self.image1 = self.image2 = self.image3 = None
+        else:
+            #reading the original large images
+            # if image is not zero and 1, we put the maximum value =1--> important for s2 calculation
+            self.image1 = np.where(tifffile.imread(self.image1_path) >= 1, 1, 0).astype(np.uint8)
+            self.image2 = np.where(tifffile.imread(self.image2_path) >= 1, 1, 0).astype(np.uint8)
+            self.image3 = np.where(tifffile.imread(self.image3_path) >= 1, 1, 0).astype(np.uint8) if image3_path is not None else None
+            self.volume = None
+
     def __len__(self):
         return self.num_samples  # Set the number of patches you want to extract
 
+    def _rand_crop(self, plane):
+        """Random patch_size x patch_size crop from a 2D plane."""
+        x = np.random.randint(0, plane.shape[0] - self.patch_size + 1)
+        y = np.random.randint(0, plane.shape[1] - self.patch_size + 1)
+        return plane[x:x + self.patch_size, y:y + self.patch_size]
+
+    def _maybe_resize(self, patch):
+        """Resize a binary patch to self.resized_to and re-binarize; no-op if resized_to is None."""
+        if not self.resized_to:
+            return patch
+        patch_pil = PIL.Image.fromarray(patch)
+        patch_resized = patch_pil.resize((self.resized_to, self.resized_to), PIL.Image.LANCZOS)
+        thresh = threshold_otsu(np.array(patch_resized))
+        return np.where(np.array(patch_resized) > thresh, 1, 0).astype(np.uint8)
+
     def __getitem__(self, index):
+        if self.is_volume:
+            v = self.volume
+            # pick a random slice index along each axis, then a random 2D crop within that slice
+            i0 = np.random.randint(0, v.shape[0])
+            i1 = np.random.randint(0, v.shape[1])
+            i2 = np.random.randint(0, v.shape[2])
+            planes = [v[i0, :, :], v[:, i1, :], v[:, :, i2]]
+            patches = [self._maybe_resize(self._rand_crop(p)) for p in planes]
+            patches = [torch.from_numpy(p).unsqueeze(dim=0).type(torch.cuda.FloatTensor) for p in patches]
+            return tuple(patches)
+
         # Random crop coordinates for image1 and image2
         x1 = np.random.randint(0, self.image1.shape[0] - self.patch_size + 1)
         y1 = np.random.randint(0, self.image1.shape[1] - self.patch_size + 1)
@@ -118,7 +155,7 @@ class Dataset_3BSEs(Dataset):
             
         
 ###--------------------------------------------------------------------------------------
-def evaluate_G(netG, num_img, img_size = 256, z_size = 4, z_channels = 16, directional= False, device = 'cuda'):
+def evaluate_G(netG, num_img, img_size = 128, z_size = 4, z_channels = 16, directional= False, device = 'cuda'):
 
     
     netG.eval()
